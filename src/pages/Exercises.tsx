@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History } from "lucide-react"
+import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Exercise {
@@ -15,6 +15,7 @@ interface Exercise {
   current_working: string | null
   progression: string | null
   personal_notes: string | null
+  detailed_walkthrough: string | null
   updated_at: string
 }
 
@@ -75,6 +76,7 @@ export function Exercises() {
   const [activeCategory, setActiveCategory] = useState("All")
   const [sortBy, setSortBy] = useState<SortOption>("name")
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -123,7 +125,8 @@ export function Exercises() {
         !q ||
         ex.name.toLowerCase().includes(q) ||
         ex.form_cues?.toLowerCase().includes(q) ||
-        ex.personal_notes?.toLowerCase().includes(q)
+        ex.personal_notes?.toLowerCase().includes(q) ||
+        ex.detailed_walkthrough?.toLowerCase().includes(q)
       return matchesCategory && matchesSearch
     })
 
@@ -300,9 +303,10 @@ export function Exercises() {
               return (
                 <div
                   key={ex.id}
-                  onClick={() =>
+                  onClick={() => {
                     setExpandedId(isExpanded ? null : ex.id)
-                  }
+                    if (isExpanded) setWalkthroughExpandedId(null)
+                  }}
                   className={cn(
                     "rounded-xl border cursor-pointer transition-all duration-200 overflow-hidden",
                     isExpanded
@@ -385,28 +389,6 @@ export function Exercises() {
                         }}
                       />
 
-                      {sections.map((section) => {
-                        const Icon = section.icon
-                        return (
-                          <div key={section.key}>
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                              <Icon className={cn("w-3.5 h-3.5", style.text)} />
-                              <span
-                                className={cn(
-                                  "text-xs font-bold font-mono uppercase tracking-wider",
-                                  style.text
-                                )}
-                              >
-                                {section.label}
-                              </span>
-                            </div>
-                            <p className="text-text-secondary text-[13.5px] leading-relaxed m-0 pl-5">
-                              {ex[section.key]}
-                            </p>
-                          </div>
-                        )
-                      })}
-
                       {/* Latest Session */}
                       {trendSessions && trendSessions.length > 0 && (() => {
                         const latest = trendSessions[0]
@@ -458,6 +440,73 @@ export function Exercises() {
                                 </div>
                               ))}
                             </div>
+                          </div>
+                        )
+                      })()}
+
+                      {sections.map((section) => {
+                        const Icon = section.icon
+                        return (
+                          <div key={section.key}>
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <Icon className={cn("w-3.5 h-3.5", style.text)} />
+                              <span
+                                className={cn(
+                                  "text-xs font-bold font-mono uppercase tracking-wider",
+                                  style.text
+                                )}
+                              >
+                                {section.label}
+                              </span>
+                            </div>
+                            <p className="text-text-secondary text-[13.5px] leading-relaxed m-0 pl-5">
+                              {ex[section.key]}
+                            </p>
+                          </div>
+                        )
+                      })}
+
+                      {/* Detailed Walkthrough — collapsible */}
+                      {ex.detailed_walkthrough && (() => {
+                        const isWtExpanded = walkthroughExpandedId === ex.id
+                        return (
+                          <div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setWalkthroughExpandedId(isWtExpanded ? null : ex.id)
+                              }}
+                              className="flex items-center gap-1.5 w-full text-left cursor-pointer bg-transparent border-none p-0"
+                            >
+                              <BookOpen className={cn("w-3.5 h-3.5 transition-colors", isWtExpanded ? style.text : "text-text-dim")} />
+                              <span
+                                className={cn(
+                                  "text-xs font-bold font-mono uppercase tracking-wider transition-colors",
+                                  isWtExpanded ? style.text : "text-text-dim"
+                                )}
+                              >
+                                Detailed Walkthrough
+                              </span>
+                              <ChevronDown
+                                className={cn(
+                                  "w-3 h-3 text-text-dim transition-transform duration-200",
+                                  isWtExpanded && "rotate-180"
+                                )}
+                              />
+                            </button>
+                            {isWtExpanded && (
+                              <div className="pl-5 mt-1.5">
+                                {ex.detailed_walkthrough!.split("\n").map((line, i) => (
+                                  line.trim() === "" ? (
+                                    <div key={i} className="h-2.5" />
+                                  ) : (
+                                    <p key={i} className="text-text-secondary text-[13.5px] leading-relaxed m-0">
+                                      {line}
+                                    </p>
+                                  )
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )
                       })()}
