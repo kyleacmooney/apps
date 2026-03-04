@@ -48,6 +48,14 @@ src/
 - Auth: Google OAuth
 - Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets` — all RLS-enabled
 
+## Preview Verification
+
+When using `preview_*` tools to verify changes:
+- The dev server URL is `http://localhost:5173/apps/` with HashRouter routes (e.g., `/#/workouts`)
+- The preview browser may start on `chrome-error://chromewebdata/` — navigate explicitly via `preview_eval` with `window.location.href = 'http://localhost:5173/apps/#/workouts'`
+- Most pages are behind `<ProtectedRoute>` (Google OAuth). The preview browser may already have an authenticated session — try navigating before assuming auth will block you
+- If the page is blank/dark, check `preview_eval` for `window.location.href` to confirm you're on the right URL
+
 ## Deployment
 
 Push to `main` → GitHub Actions builds and deploys to GitHub Pages. Workflow: `.github/workflows/deploy.yml`.

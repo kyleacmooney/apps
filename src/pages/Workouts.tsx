@@ -214,8 +214,10 @@ function SessionCard({
         if (e.target === e.currentTarget) onToggleSession()
       }}
       className={cn(
-        "rounded-xl bg-bg-secondary border border-border-default p-4 sm:p-5",
-        isNonWorkout && !isSessionExpanded && !highlighted && "opacity-60 transition-opacity duration-300"
+        "rounded-xl bg-bg-secondary border border-border-default transition-all duration-300",
+        isNonWorkout && !isSessionExpanded
+          ? cn("py-2 px-4 sm:px-5", !highlighted && "opacity-60")
+          : "p-4 sm:p-5"
       )}
     >
       {/* Session header — clickable to expand/collapse */}
@@ -227,7 +229,7 @@ function SessionCard({
         }}
         className="cursor-pointer select-none"
       >
-        <div className="flex items-start justify-between mb-2">
+        <div className={cn("flex items-start justify-between", isNonWorkout && !isSessionExpanded ? "mb-0" : "mb-2")}>
           <div className="flex items-start gap-2">
             <ChevronRight
               className={cn(
@@ -239,7 +241,7 @@ function SessionCard({
               <h3 className="text-text-primary font-semibold text-[15px] m-0">
                 {session.title ?? session.session_type}
               </h3>
-              <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <div className={cn("flex items-center gap-3 mt-1 flex-wrap", isNonWorkout && !isSessionExpanded && "hidden")}>
                 <div className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-text-dim" />
                   <span className="text-text-muted text-xs font-mono">
@@ -278,7 +280,8 @@ function SessionCard({
           </span>
         </div>
 
-        {(session.energy_rating != null || session.energy_level || session.body_state) && (
+        {/* Hide energy/body metadata on collapsed non-workout cards */}
+        {(isSessionExpanded || !isNonWorkout) && (session.energy_rating != null || session.energy_level || session.body_state) && (
           <div className="flex items-center gap-2 ml-6 flex-wrap">
             {session.energy_rating != null ? (
               <EnergyBar level={session.energy_rating} />
@@ -303,8 +306,8 @@ function SessionCard({
           </div>
         )}
 
-        {/* Summary line when collapsed */}
-        {!isSessionExpanded && exerciseCount > 0 && (
+        {/* Summary line when collapsed — only for workout cards */}
+        {!isSessionExpanded && !isNonWorkout && exerciseCount > 0 && (
           <div className="flex items-center gap-2 mt-2 ml-6">
             <span className="text-text-dim text-xs font-mono">
               {exerciseCount} exercises
