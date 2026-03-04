@@ -55,6 +55,13 @@
   --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
 }
 
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   body {
     @apply bg-bg-primary text-text-primary font-sans antialiased;

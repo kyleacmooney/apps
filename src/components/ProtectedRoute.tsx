@@ -5,6 +5,11 @@ import { LogIn } from "lucide-react"
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading, signIn } = useAuth()
 
+  // In dev mode, skip auth to allow visual testing of protected pages
+  if (import.meta.env.DEV) {
+    return <>{children}</>
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-bg-primary flex items-center justify-center">
