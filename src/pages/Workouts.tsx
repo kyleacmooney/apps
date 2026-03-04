@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { formatSet, type TrendSet } from "@/lib/workout-utils"
@@ -25,6 +25,7 @@ interface WorkoutSession {
   session_type: string
   energy_level: string | null
   energy_rating: number | null
+  body_state: string | null
   time_of_day: string | null
   location: string | null
   notes: string | null
@@ -35,6 +36,14 @@ interface WorkoutSession {
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number)
   return new Date(y, m - 1, d)
+}
+
+/** Format a snake_case enum value for display: "full_send" → "Full Send" */
+function formatEnum(value: string): string {
+  return value
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ")
 }
 
 const SESSION_TYPE_STYLES: Record<string, string> = {
@@ -162,7 +171,22 @@ function SessionCard({
   onToggleSession: () => void
 }) {
   const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null)
+  const [highlighted, setHighlighted] = useState(false)
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const exercises = session.workout_exercises
+  const isNonWorkout = session.session_type !== "workout"
+
+  const triggerHighlight = useCallback(() => {
+    if (!isNonWorkout) return
+    setHighlighted(true)
+    if (highlightTimer.current) clearTimeout(highlightTimer.current)
+    highlightTimer.current = setTimeout(() => setHighlighted(false), 3000)
+  }, [isNonWorkout])
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => { if (highlightTimer.current) clearTimeout(highlightTimer.current) }
+  }, [])
 
   // Group exercises by section
   const sections = SECTION_ORDER
@@ -182,13 +206,25 @@ function SessionCard({
   )
 
   return (
-    <div className={cn(
-      "rounded-xl bg-bg-secondary border border-border-default p-4 sm:p-5",
-      session.session_type !== "workout" && !isSessionExpanded && "opacity-60 hover:opacity-100 active:opacity-100 transition-opacity duration-300"
-    )}>
+    <div
+      onClick={(e) => {
+        // Any tap on the card (including non-clickable areas) triggers highlight
+        if (isNonWorkout) triggerHighlight()
+        // If tap is on the card background itself (not child interactive), toggle session
+        if (e.target === e.currentTarget) onToggleSession()
+      }}
+      className={cn(
+        "rounded-xl bg-bg-secondary border border-border-default p-4 sm:p-5",
+        isNonWorkout && !isSessionExpanded && !highlighted && "opacity-60 transition-opacity duration-300"
+      )}
+    >
       {/* Session header — clickable to expand/collapse */}
       <div
-        onClick={onToggleSession}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (isNonWorkout && isSessionExpanded) triggerHighlight()
+          onToggleSession()
+        }}
         className="cursor-pointer select-none"
       >
         <div className="flex items-start justify-between mb-2">
@@ -242,17 +278,27 @@ function SessionCard({
           </span>
         </div>
 
-        {(session.energy_rating != null || session.energy_level) && (
-          <div className="flex items-center gap-2 ml-6">
+        {(session.energy_rating != null || session.energy_level || session.body_state) && (
+          <div className="flex items-center gap-2 ml-6 flex-wrap">
             {session.energy_rating != null ? (
               <EnergyBar level={session.energy_rating} />
-            ) : (
+            ) : session.energy_level ? (
               <Zap className="w-3.5 h-3.5 text-core" />
-            )}
+            ) : null}
             {session.energy_level && (
               <span className="text-text-muted text-xs font-mono">
-                {session.energy_level}
+                {formatEnum(session.energy_level)}
               </span>
+            )}
+            {session.body_state && (
+              <>
+                {(session.energy_rating != null || session.energy_level) && (
+                  <span className="text-text-dim text-xs">·</span>
+                )}
+                <span className="text-text-muted text-xs font-mono">
+                  {formatEnum(session.body_state)}
+                </span>
+              </>
             )}
           </div>
         )}
@@ -335,7 +381,7 @@ export function Workouts() {
       const { data, error } = await supabase
         .from("workout_sessions")
         .select(`
-          id, date, title, session_type, energy_level, energy_rating, time_of_day, location, notes,
+          id, date, title, session_type, energy_level, energy_rating, body_state, time_of_day, location, notes,
           workout_exercises (
             id, exercise_name, section, position, notes,
             workout_sets (
