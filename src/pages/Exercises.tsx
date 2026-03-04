@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen } from "lucide-react"
+import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Exercise {
@@ -221,8 +221,16 @@ export function Exercises() {
               placeholder="Search exercises, cues, notes..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full py-2.5 pl-9 pr-4 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-sm font-sans placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
+              className="w-full py-2.5 pl-9 pr-9 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-base font-sans placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
             />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-dim hover:text-text-muted transition-colors cursor-pointer bg-transparent border-none p-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Category filters */}
