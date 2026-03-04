@@ -410,6 +410,10 @@ export function Exercises() {
                       {/* Latest Session */}
                       {trendSessions && trendSessions.length > 0 && (() => {
                         const latest = trendSessions[0]
+                        const displayableSets = latest.sets.filter(
+                          (s) => s.reps != null || s.duration_seconds != null
+                        )
+                        if (displayableSets.length === 0) return null
                         return (
                           <div>
                             <div className="flex items-center gap-1.5 mb-2">
@@ -430,7 +434,7 @@ export function Exercises() {
                               </span>
                             </div>
                             <div className="pl-5 flex flex-col gap-0.5">
-                              {latest.sets.map((set) => (
+                              {displayableSets.map((set) => (
                                 <div
                                   key={set.set_number}
                                   className="flex items-baseline gap-2 text-[12.5px] font-mono"
