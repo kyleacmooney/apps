@@ -1,13 +1,8 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-
-interface Exercise {
-  id: string
-  name: string
-  category: string
-  current_working: string | null
-}
+import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
+import { supabase } from "@/lib/supabase"
+import { ArrowLeft, Calendar, Zap, FileText } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface WorkoutSession {
   id: string
@@ -18,97 +13,156 @@ interface WorkoutSession {
   notes: string | null
 }
 
+function EnergyBar({ level }: { level: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Zap className="w-3.5 h-3.5 text-core" />
+      <div className="flex gap-0.5">
+        {Array.from({ length: 10 }, (_, i) => (
+          <div
+            key={i}
+            className={cn(
+              "w-1.5 h-3 rounded-sm transition-colors",
+              i < level ? "bg-core" : "bg-border-default"
+            )}
+          />
+        ))}
+      </div>
+      <span className="text-text-dim text-[11px] font-mono ml-0.5">
+        {level}/10
+      </span>
+    </div>
+  )
+}
+
 export function Workouts() {
-  const [exercises, setExercises] = useState<Exercise[]>([])
   const [sessions, setSessions] = useState<WorkoutSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function fetchData() {
-      const [exerciseRes, sessionRes] = await Promise.all([
-        supabase
-          .from('exercises')
-          .select('id, name, category, current_working')
-          .order('category')
-          .order('name'),
-        supabase
-          .from('workout_sessions')
-          .select('id, date, title, session_type, energy_level, notes')
-          .order('date', { ascending: false })
-          .limit(10),
-      ])
+    async function load() {
+      const { data, error } = await supabase
+        .from("workout_sessions")
+        .select("id, date, title, session_type, energy_level, notes")
+        .order("date", { ascending: false })
+        .limit(20)
 
-      if (exerciseRes.error) {
-        setError(exerciseRes.error.message)
+      if (error) {
+        setError(error.message)
       } else {
-        setExercises(exerciseRes.data)
+        setSessions(data ?? [])
       }
-
-      if (sessionRes.error && sessionRes.error.code !== 'PGRST116') {
-        setError(prev => prev ? `${prev}; ${sessionRes.error.message}` : sessionRes.error.message)
-      } else if (sessionRes.data) {
-        setSessions(sessionRes.data)
-      }
-
       setLoading(false)
     }
-    fetchData()
+    load()
   }, [])
 
-  if (loading) return <div className="center">Loading...</div>
-  if (error) return <div className="center error">Error: {error}</div>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-3 border-border-default border-t-cardio rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-text-muted text-sm">Loading sessions...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center p-5">
+        <div className="bg-upper-push-bg border border-upper-push-border rounded-xl p-6 max-w-sm text-center">
+          <p className="text-upper-push font-semibold mb-2">
+            Failed to load sessions
+          </p>
+          <p className="text-text-muted text-sm">{error}</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="page">
-      <nav className="breadcrumbs">
-        <Link to="/">Home</Link> / Workouts
-      </nav>
+    <div className="min-h-screen bg-bg-primary">
+      {/* Header */}
+      <div className="border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
+        <div className="max-w-2xl mx-auto px-5 pt-4 pb-4">
+          <div className="flex items-center gap-3 mb-1">
+            <Link
+              to="/"
+              className="text-text-muted hover:text-text-primary transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="flex items-baseline gap-2.5">
+              <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+                Workout Sessions
+              </h1>
+              <span className="text-text-dim text-xs font-mono font-medium">
+                {sessions.length}
+              </span>
+            </div>
+          </div>
+          <p className="text-text-dim text-xs ml-8">
+            Recent training history
+          </p>
+        </div>
+      </div>
 
-      <h1>Workouts</h1>
-
-      <section>
-        <h2>Exercises ({exercises.length})</h2>
-        {exercises.length === 0 ? (
-          <p>No exercises found.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Current Working</th>
-              </tr>
-            </thead>
-            <tbody>
-              {exercises.map(ex => (
-                <tr key={ex.id}>
-                  <td>{ex.name}</td>
-                  <td>{ex.category}</td>
-                  <td>{ex.current_working ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section>
-        <h2>Recent Sessions ({sessions.length})</h2>
+      {/* Sessions list */}
+      <div className="max-w-2xl mx-auto px-5 py-4 pb-10">
         {sessions.length === 0 ? (
-          <p>No sessions logged yet.</p>
+          <div className="text-center py-12">
+            <p className="text-text-dim text-sm">No sessions logged yet.</p>
+          </div>
         ) : (
-          <ul>
-            {sessions.map(s => (
-              <li key={s.id}>
-                <strong>{s.date}</strong> — {s.title ?? s.session_type}
-                {s.energy_level != null && <span> (energy: {s.energy_level}/10)</span>}
-                {s.notes && <p>{s.notes}</p>}
-              </li>
+          <div className="flex flex-col gap-2">
+            {sessions.map((s) => (
+              <div
+                key={s.id}
+                className="rounded-xl bg-bg-secondary border border-border-default p-4 sm:p-5"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="text-text-primary font-semibold text-[15px] m-0">
+                      {s.title ?? s.session_type}
+                    </h3>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Calendar className="w-3.5 h-3.5 text-text-dim" />
+                      <span className="text-text-muted text-xs font-mono">
+                        {new Date(s.date).toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md bg-cardio-tag text-cardio">
+                    {s.session_type}
+                  </span>
+                </div>
+
+                {s.energy_level != null && (
+                  <div className="mt-3">
+                    <EnergyBar level={s.energy_level} />
+                  </div>
+                )}
+
+                {s.notes && (
+                  <div className="mt-3 flex gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-text-dim shrink-0 mt-0.5" />
+                    <p className="text-text-secondary text-sm leading-relaxed m-0">
+                      {s.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
             ))}
-          </ul>
+          </div>
         )}
-      </section>
+      </div>
     </div>
   )
 }
