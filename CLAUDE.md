@@ -21,9 +21,10 @@ src/
   lib/supabase.ts              # Supabase client (anon key inline)
   lib/utils.ts                 # cn() utility for Tailwind class merging
   lib/categories.ts            # Exercise category colors and utilities
+  lib/workout-utils.ts         # Workout formatting helpers (set display, relative dates)
   context/AuthContext.tsx       # Google OAuth provider, useAuth() hook
   components/ProtectedRoute.tsx # Redirects to login if unauthenticated
-  components/ui/               # shadcn/ui components (accordion, button, etc.)
+  components/ui/               # shadcn/ui components (accordion, badge, button, card, input)
   pages/Home.tsx               # Landing page with nav cards
   pages/Exercises.tsx          # Exercise encyclopedia with search/filters
   pages/Workouts.tsx           # Workout session history

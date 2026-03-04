@@ -1,18 +1,12 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
+import { formatSet, type TrendSet } from "@/lib/workout-utils"
 import { ArrowLeft, Calendar, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface WorkoutSet {
+interface WorkoutSet extends TrendSet {
   id: string
-  set_number: number
-  reps: number | null
-  weight: number | null
-  weight_unit: string
-  duration_seconds: number | null
-  is_pr: boolean
-  notes: string | null
 }
 
 interface WorkoutExercise {
@@ -50,30 +44,6 @@ const SECTION_LABELS: Record<string, string> = {
   accessory: "Accessory",
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds >= 60) {
-    const m = Math.floor(seconds / 60)
-    const s = seconds % 60
-    return s > 0 ? `${m}:${String(s).padStart(2, "0")}` : `${m}:00`
-  }
-  return `${seconds}s`
-}
-
-function formatSet(set: WorkoutSet): string {
-  const parts: string[] = []
-  if (set.reps != null) {
-    parts.push(`${set.reps}`)
-    if (set.weight != null) {
-      parts.push(`× ${set.weight}${set.weight_unit}`)
-    }
-  } else if (set.duration_seconds != null) {
-    parts.push(formatDuration(set.duration_seconds))
-    if (set.weight != null) {
-      parts.push(`@ ${set.weight}${set.weight_unit}`)
-    }
-  }
-  return parts.join(" ")
-}
 
 function EnergyBar({ level }: { level: number }) {
   return (

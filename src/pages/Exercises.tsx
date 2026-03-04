@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
-import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote } from "lucide-react"
+import { formatSet, formatDuration, relativeDate, type TrendSet } from "@/lib/workout-utils"
+import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Exercise {
@@ -17,6 +18,32 @@ interface Exercise {
   updated_at: string
 }
 
+interface ExerciseSummary {
+  exercise_id: string
+  name: string
+  category: string
+  current_working: string | null
+  last_performed: string | null
+  total_sessions: number
+  latest_pr: {
+    weight: number
+    weight_unit: string
+    reps: number
+    date: string
+    notes: string | null
+  } | null
+  best_duration_seconds: number | null
+  max_weight: number | null
+}
+
+interface ExerciseTrendSession {
+  exercise_id: string
+  name: string
+  date: string
+  session_id: string
+  sets: TrendSet[]
+}
+
 const DETAIL_SECTIONS = [
   { key: "form_cues" as const, label: "Form Cues", icon: Target },
   { key: "common_mistakes" as const, label: "Common Mistakes", icon: AlertTriangle },
@@ -25,33 +52,70 @@ const DETAIL_SECTIONS = [
   { key: "personal_notes" as const, label: "Personal Notes", icon: StickyNote },
 ]
 
+type SortOption = "name" | "last_performed" | "total_sessions"
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "name", label: "A-Z" },
+  { value: "last_performed", label: "Recent" },
+  { value: "total_sessions", label: "Most Used" },
+]
+
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
+
 export function Exercises() {
   const [exercises, setExercises] = useState<Exercise[]>([])
+  const [summaryMap, setSummaryMap] = useState<Map<string, ExerciseSummary>>(new Map())
+  const [trendMap, setTrendMap] = useState<Map<string, ExerciseTrendSession[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [activeCategory, setActiveCategory] = useState("All")
+  const [sortBy, setSortBy] = useState<SortOption>("name")
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
-      const { data, error } = await supabase
-        .from("exercises")
-        .select("*")
-        .order("name")
+      const [exercisesRes, summaryRes, trendRes] = await Promise.all([
+        supabase.from("exercises").select("*").order("name"),
+        supabase.from("exercise_summary").select("*"),
+        supabase.from("exercise_recent_trend").select("*"),
+      ])
 
-      if (error) {
-        setError(error.message)
+      if (exercisesRes.error) {
+        setError(exercisesRes.error.message)
       } else {
-        setExercises(data)
+        setExercises(exercisesRes.data)
       }
+
+      if (summaryRes.data) {
+        const map = new Map<string, ExerciseSummary>()
+        for (const row of summaryRes.data) {
+          map.set(row.exercise_id, row as ExerciseSummary)
+        }
+        setSummaryMap(map)
+      }
+
+      if (trendRes.data) {
+        const map = new Map<string, ExerciseTrendSession[]>()
+        for (const row of trendRes.data) {
+          const entry = row as ExerciseTrendSession
+          const existing = map.get(entry.exercise_id) ?? []
+          existing.push(entry)
+          map.set(entry.exercise_id, existing)
+        }
+        setTrendMap(map)
+      }
+
       setLoading(false)
     }
     load()
   }, [])
 
   const filtered = useMemo(() => {
-    return exercises.filter((ex) => {
+    const base = exercises.filter((ex) => {
       const matchesCategory =
         activeCategory === "All" || ex.category === activeCategory
       const q = search.toLowerCase()
@@ -62,7 +126,26 @@ export function Exercises() {
         ex.personal_notes?.toLowerCase().includes(q)
       return matchesCategory && matchesSearch
     })
-  }, [exercises, activeCategory, search])
+
+    return [...base].sort((a, b) => {
+      if (sortBy === "name") {
+        return a.name.localeCompare(b.name)
+      }
+      if (sortBy === "last_performed") {
+        const aDate = summaryMap.get(a.id)?.last_performed ?? ""
+        const bDate = summaryMap.get(b.id)?.last_performed ?? ""
+        if (!aDate && !bDate) return a.name.localeCompare(b.name)
+        if (!aDate) return 1
+        if (!bDate) return -1
+        return bDate.localeCompare(aDate)
+      }
+      // total_sessions
+      const aCount = summaryMap.get(a.id)?.total_sessions ?? 0
+      const bCount = summaryMap.get(b.id)?.total_sessions ?? 0
+      if (aCount === bCount) return a.name.localeCompare(b.name)
+      return bCount - aCount
+    })
+  }, [exercises, activeCategory, search, sortBy, summaryMap])
 
   const categoryCounts = useMemo(() => {
     return exercises.reduce<Record<string, number>>((acc, ex) => {
@@ -171,6 +254,25 @@ export function Exercises() {
               )
             })}
           </div>
+
+          {/* Sort options */}
+          <div className="flex items-center gap-2 mt-2.5">
+            <span className="text-text-dim text-[11px] font-mono">Sort:</span>
+            {SORT_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setSortBy(opt.value)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-semibold font-mono transition-all cursor-pointer",
+                  sortBy === opt.value
+                    ? "border border-text-muted/40 bg-text-muted/10 text-text-secondary"
+                    : "border border-transparent text-text-dim hover:text-text-muted"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -191,6 +293,9 @@ export function Exercises() {
               const sections = DETAIL_SECTIONS.filter(
                 (s) => ex[s.key]
               )
+              const summary = summaryMap.get(ex.id)
+              const hasBeenPerformed = summary && summary.total_sessions > 0
+              const trendSessions = trendMap.get(ex.id)
 
               return (
                 <div
@@ -206,26 +311,68 @@ export function Exercises() {
                   )}
                 >
                   {/* Card header */}
-                  <div className="flex items-center justify-between px-4 py-3.5 sm:px-5">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span
+                  <div className="px-4 py-3.5 sm:px-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className={cn(
+                            "shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md",
+                            style.tag
+                          )}
+                        >
+                          {ex.category}
+                        </span>
+                        <span className={cn(
+                          "text-[15px] font-semibold truncate",
+                          hasBeenPerformed ? "text-text-primary" : "text-text-muted"
+                        )}>
+                          {ex.name}
+                        </span>
+                      </div>
+                      <ChevronDown
                         className={cn(
-                          "shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md",
-                          style.tag
+                          "w-4 h-4 text-text-dim shrink-0 ml-3 transition-transform duration-200",
+                          isExpanded && "rotate-180"
                         )}
-                      >
-                        {ex.category}
-                      </span>
-                      <span className="text-text-primary text-[15px] font-semibold truncate">
-                        {ex.name}
-                      </span>
+                      />
                     </div>
-                    <ChevronDown
-                      className={cn(
-                        "w-4 h-4 text-text-dim shrink-0 ml-3 transition-transform duration-200",
-                        isExpanded && "rotate-180"
-                      )}
-                    />
+
+                    {/* Stats row — only when exercise has been performed */}
+                    {hasBeenPerformed && (
+                      <div className="flex items-center gap-1.5 mt-1.5 ml-[calc(0.625rem+theme(spacing.2.5))] text-text-dim text-[11px] font-mono flex-wrap">
+                        <span>{summary.total_sessions} {summary.total_sessions === 1 ? "session" : "sessions"}</span>
+                        {summary.last_performed && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span>Last {relativeDate(summary.last_performed)}</span>
+                          </>
+                        )}
+                        {summary.latest_pr && summary.latest_pr.reps != null && summary.latest_pr.weight != null && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className="flex items-center gap-1 text-core">
+                              <Trophy className="w-3 h-3" />
+                              PR: {summary.latest_pr.reps} × {summary.latest_pr.weight}{summary.latest_pr.weight_unit}
+                            </span>
+                          </>
+                        )}
+                        {summary.best_duration_seconds != null && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className={cn("flex items-center gap-1", summary.latest_pr && "text-core")}>
+                              {summary.latest_pr && <Trophy className="w-3 h-3" />}
+                              Best: {formatDuration(summary.best_duration_seconds)}
+                            </span>
+                          </>
+                        )}
+                        {!summary.latest_pr?.reps && summary.best_duration_seconds == null && summary.max_weight != null && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span>Max: {summary.max_weight}lb</span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Expanded content */}
@@ -259,6 +406,57 @@ export function Exercises() {
                           </div>
                         )
                       })}
+
+                      {/* Latest Session */}
+                      {trendSessions && trendSessions.length > 0 && (() => {
+                        const latest = trendSessions[0]
+                        return (
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <History className={cn("w-3.5 h-3.5", style.text)} />
+                              <span
+                                className={cn(
+                                  "text-xs font-bold font-mono uppercase tracking-wider",
+                                  style.text
+                                )}
+                              >
+                                Latest Session
+                              </span>
+                              <span className="text-text-dim text-[11px] font-mono">
+                                {parseLocalDate(latest.date).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </span>
+                            </div>
+                            <div className="pl-5 flex flex-col gap-0.5">
+                              {latest.sets.map((set) => (
+                                <div
+                                  key={set.set_number}
+                                  className="flex items-baseline gap-2 text-[12.5px] font-mono"
+                                >
+                                  <span className="text-text-dim w-4 text-right shrink-0">
+                                    {set.set_number})
+                                  </span>
+                                  <span className="text-text-secondary">
+                                    {formatSet(set)}
+                                  </span>
+                                  {set.is_pr && (
+                                    <span className="text-core text-[10px] font-bold uppercase tracking-wider">
+                                      PR
+                                    </span>
+                                  )}
+                                  {set.notes && (
+                                    <span className="text-text-dim text-[11px] font-sans italic">
+                                      — {set.notes}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
 
                       <div className="text-text-dim text-[11px] font-mono pt-1 border-t border-border-default">
                         Updated{" "}
