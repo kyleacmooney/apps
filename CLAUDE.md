@@ -16,12 +16,17 @@ npm run build      # TypeScript check + Vite build to dist/
 ```
 src/
   main.tsx                     # React root
+  index.css                    # Tailwind CSS v4 + dark theme variables
   App.tsx                      # HashRouter + route definitions
   lib/supabase.ts              # Supabase client (anon key inline)
+  lib/utils.ts                 # cn() utility for Tailwind class merging
+  lib/categories.ts            # Exercise category colors and utilities
   context/AuthContext.tsx       # Google OAuth provider, useAuth() hook
   components/ProtectedRoute.tsx # Redirects to login if unauthenticated
-  pages/Home.tsx               # Landing page with nav
-  pages/Workouts.tsx           # Workout logging + exercise review
+  components/ui/               # shadcn/ui components (accordion, button, etc.)
+  pages/Home.tsx               # Landing page with nav cards
+  pages/Exercises.tsx          # Exercise encyclopedia with search/filters
+  pages/Workouts.tsx           # Workout session history
 ```
 
 ## Key Patterns
@@ -31,6 +36,10 @@ src/
 - **Auth flow:** `useAuth()` hook provides `user`, `signIn`, `signOut`. Wrap routes in `<ProtectedRoute>` to require login
 - **Adding a new page:** Create `src/pages/NewPage.tsx`, add a `<Route>` in `App.tsx`, optionally wrap in `<ProtectedRoute>`
 - **Vite base path** is `/apps/` (matches the GitHub repo name for correct asset resolution on GitHub Pages)
+- **Tailwind CSS v4** — utility-first styling via `@tailwindcss/vite` plugin, dark theme colors defined in `src/index.css`
+- **shadcn/ui** — component primitives in `components/ui/`, installed via `npx shadcn@latest add <component>`
+- **Category colors** — defined as Tailwind theme variables in `index.css`, mapped to class names in `lib/categories.ts`
+- **Path alias** — `@/` maps to `src/` (configured in vite.config.ts and tsconfig)
 
 ## Supabase
 
