@@ -37,6 +37,12 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(y, m - 1, d)
 }
 
+const SESSION_TYPE_STYLES: Record<string, string> = {
+  workout: "bg-session-workout-bg text-session-workout font-bold",
+  mobility: "bg-session-mobility-bg text-session-mobility",
+  mixed: "bg-session-mixed-bg text-session-mixed",
+}
+
 const SECTION_ORDER = ["warmup", "main", "accessory"] as const
 const SECTION_LABELS: Record<string, string> = {
   warmup: "Warmup",
@@ -176,7 +182,10 @@ function SessionCard({
   )
 
   return (
-    <div className="rounded-xl bg-bg-secondary border border-border-default p-4 sm:p-5">
+    <div className={cn(
+      "rounded-xl bg-bg-secondary border border-border-default p-4 sm:p-5",
+      session.session_type !== "workout" && !isSessionExpanded && "opacity-60 hover:opacity-100 active:opacity-100 transition-opacity duration-300"
+    )}>
       {/* Session header — clickable to expand/collapse */}
       <div
         onClick={onToggleSession}
@@ -225,7 +234,10 @@ function SessionCard({
               </div>
             </div>
           </div>
-          <span className="shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md bg-cardio-tag text-cardio">
+          <span className={cn(
+            "shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md",
+            SESSION_TYPE_STYLES[session.session_type] ?? "bg-bg-elevated text-text-muted"
+          )}>
             {session.session_type}
           </span>
         </div>
@@ -340,9 +352,10 @@ export function Workouts() {
       } else {
         const loaded = data ?? []
         setSessions(loaded)
-        // Default: most recent session expanded
-        if (loaded.length > 0) {
-          setExpandedSessionIds(new Set([loaded[0].id]))
+        // Default: most recent workout session expanded
+        const firstWorkout = loaded.find((s) => s.session_type === "workout")
+        if (firstWorkout) {
+          setExpandedSessionIds(new Set([firstWorkout.id]))
         }
       }
       setLoading(false)

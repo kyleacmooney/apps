@@ -51,6 +51,13 @@
   --color-neck-border: #6d9a2d;
   --color-neck-tag: #1a300e;
 
+  --color-session-workout: #f0f0f8;
+  --color-session-workout-bg: #3a3a5a;
+  --color-session-mobility: #5ed4e0;
+  --color-session-mobility-bg: #0e2a30;
+  --color-session-mixed: #c4a0e0;
+  --color-session-mixed-bg: #1e1430;
+
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
 }
