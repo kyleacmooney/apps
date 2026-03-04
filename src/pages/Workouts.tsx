@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
-import { ArrowLeft, Calendar, Zap, FileText, ChevronDown, Trophy } from "lucide-react"
+import { ArrowLeft, Calendar, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface WorkoutSet {
@@ -30,8 +30,17 @@ interface WorkoutSession {
   title: string | null
   session_type: string
   energy_level: string | null
+  energy_rating: number | null
+  time_of_day: string | null
+  location: string | null
   notes: string | null
   workout_exercises: WorkoutExercise[]
+}
+
+/** Parse a date-only string (YYYY-MM-DD) as local time, not UTC. */
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number)
+  return new Date(y, m - 1, d)
 }
 
 const SECTION_ORDER = ["warmup", "main", "accessory"] as const
@@ -64,6 +73,25 @@ function formatSet(set: WorkoutSet): string {
     }
   }
   return parts.join(" ")
+}
+
+function EnergyBar({ level }: { level: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Zap className="w-3.5 h-3.5 text-core" />
+      <div className="flex gap-0.5">
+        {Array.from({ length: 10 }, (_, i) => (
+          <div
+            key={i}
+            className={cn(
+              "w-1.5 h-3 rounded-sm transition-colors",
+              i < level ? "bg-core" : "bg-border-default"
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function ExerciseRow({
@@ -148,7 +176,15 @@ function ExerciseRow({
   )
 }
 
-function SessionCard({ session }: { session: WorkoutSession }) {
+function SessionCard({
+  session,
+  isSessionExpanded,
+  onToggleSession,
+}: {
+  session: WorkoutSession
+  isSessionExpanded: boolean
+  onToggleSession: () => void
+}) {
   const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null)
   const exercises = session.workout_exercises
 
@@ -163,78 +199,144 @@ function SessionCard({ session }: { session: WorkoutSession }) {
     }))
     .filter((s) => s.exercises.length > 0)
 
+  const exerciseCount = exercises.length
+  const prCount = exercises.reduce(
+    (acc, ex) => acc + ex.workout_sets.filter((s) => s.is_pr).length,
+    0
+  )
+
   return (
     <div className="rounded-xl bg-bg-secondary border border-border-default p-4 sm:p-5">
-      {/* Session header */}
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <h3 className="text-text-primary font-semibold text-[15px] m-0">
-            {session.title ?? session.session_type}
-          </h3>
-          <div className="flex items-center gap-1.5 mt-1">
-            <Calendar className="w-3.5 h-3.5 text-text-dim" />
-            <span className="text-text-muted text-xs font-mono">
-              {new Date(session.date).toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-          </div>
-        </div>
-        <span className="shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md bg-cardio-tag text-cardio">
-          {session.session_type}
-        </span>
-      </div>
-
-      {session.energy_level && (
-        <div className="flex items-center gap-1.5 mt-2">
-          <Zap className="w-3.5 h-3.5 text-core" />
-          <span className="text-text-muted text-xs font-mono">
-            {session.energy_level}
-          </span>
-        </div>
-      )}
-
-      {/* Exercise sections */}
-      {sections.length > 0 && (
-        <div className="mt-4 flex flex-col gap-3">
-          {sections.map((section) => (
-            <div key={section.key}>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-text-dim text-[10px] font-bold font-mono uppercase tracking-widest">
-                  {section.label}
-                </span>
-                <div className="flex-1 h-px bg-border-default" />
-              </div>
-              <div className="flex flex-col">
-                {section.exercises.map((ex) => (
-                  <ExerciseRow
-                    key={ex.id}
-                    exercise={ex}
-                    isExpanded={expandedExerciseId === ex.id}
-                    onToggle={() =>
-                      setExpandedExerciseId(
-                        expandedExerciseId === ex.id ? null : ex.id
-                      )
-                    }
-                  />
-                ))}
+      {/* Session header — clickable to expand/collapse */}
+      <div
+        onClick={onToggleSession}
+        className="cursor-pointer select-none"
+      >
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-start gap-2">
+            <ChevronRight
+              className={cn(
+                "w-4 h-4 text-text-dim shrink-0 mt-0.5 transition-transform duration-200",
+                isSessionExpanded && "rotate-90"
+              )}
+            />
+            <div>
+              <h3 className="text-text-primary font-semibold text-[15px] m-0">
+                {session.title ?? session.session_type}
+              </h3>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-text-dim" />
+                  <span className="text-text-muted text-xs font-mono">
+                    {parseLocalDate(session.date).toLocaleDateString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+                {session.time_of_day && (
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-text-dim" />
+                    <span className="text-text-muted text-xs font-mono">
+                      {session.time_of_day}
+                    </span>
+                  </div>
+                )}
+                {session.location && (
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-text-dim" />
+                    <span className="text-text-muted text-xs font-mono">
+                      {session.location}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
-          ))}
+          </div>
+          <span className="shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md bg-cardio-tag text-cardio">
+            {session.session_type}
+          </span>
         </div>
-      )}
 
-      {/* Session notes (fallback for sessions without structured exercises) */}
-      {session.notes && exercises.length === 0 && (
-        <div className="mt-3 flex gap-1.5">
-          <FileText className="w-3.5 h-3.5 text-text-dim shrink-0 mt-0.5" />
-          <p className="text-text-secondary text-sm leading-relaxed m-0">
-            {session.notes}
-          </p>
-        </div>
+        {(session.energy_rating != null || session.energy_level) && (
+          <div className="flex items-center gap-2 ml-6">
+            {session.energy_rating != null ? (
+              <EnergyBar level={session.energy_rating} />
+            ) : (
+              <Zap className="w-3.5 h-3.5 text-core" />
+            )}
+            {session.energy_level && (
+              <span className="text-text-muted text-xs font-mono">
+                {session.energy_level}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Summary line when collapsed */}
+        {!isSessionExpanded && exerciseCount > 0 && (
+          <div className="flex items-center gap-2 mt-2 ml-6">
+            <span className="text-text-dim text-xs font-mono">
+              {exerciseCount} exercises
+            </span>
+            {prCount > 0 && (
+              <>
+                <span className="text-text-dim text-xs">·</span>
+                <span className="text-core text-xs font-mono flex items-center gap-1">
+                  <Trophy className="w-3 h-3" />
+                  {prCount} {prCount === 1 ? "PR" : "PRs"}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Expanded content */}
+      {isSessionExpanded && (
+        <>
+          {/* Exercise sections */}
+          {sections.length > 0 && (
+            <div className="mt-4 ml-6 flex flex-col gap-3">
+              {sections.map((section) => (
+                <div key={section.key}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-text-dim text-[10px] font-bold font-mono uppercase tracking-widest">
+                      {section.label}
+                    </span>
+                    <div className="flex-1 h-px bg-border-default" />
+                  </div>
+                  <div className="flex flex-col">
+                    {section.exercises.map((ex) => (
+                      <ExerciseRow
+                        key={ex.id}
+                        exercise={ex}
+                        isExpanded={expandedExerciseId === ex.id}
+                        onToggle={() =>
+                          setExpandedExerciseId(
+                            expandedExerciseId === ex.id ? null : ex.id
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Session notes — always shown when present */}
+          {session.notes && (
+            <div className="mt-3 ml-6 flex gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-text-dim shrink-0 mt-0.5" />
+              <p className="text-text-secondary text-sm leading-relaxed m-0">
+                {session.notes}
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -244,13 +346,14 @@ export function Workouts() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     async function load() {
       const { data, error } = await supabase
         .from("workout_sessions")
         .select(`
-          id, date, title, session_type, energy_level, notes,
+          id, date, title, session_type, energy_level, energy_rating, time_of_day, location, notes,
           workout_exercises (
             id, exercise_name, section, position, notes,
             workout_sets (
@@ -265,7 +368,12 @@ export function Workouts() {
       if (error) {
         setError(error.message)
       } else {
-        setSessions(data ?? [])
+        const loaded = data ?? []
+        setSessions(loaded)
+        // Default: most recent session expanded
+        if (loaded.length > 0) {
+          setExpandedSessionIds(new Set([loaded[0].id]))
+        }
       }
       setLoading(false)
     }
@@ -332,7 +440,22 @@ export function Workouts() {
         ) : (
           <div className="flex flex-col gap-3">
             {sessions.map((s) => (
-              <SessionCard key={s.id} session={s} />
+              <SessionCard
+                key={s.id}
+                session={s}
+                isSessionExpanded={expandedSessionIds.has(s.id)}
+                onToggleSession={() =>
+                  setExpandedSessionIds((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(s.id)) {
+                      next.delete(s.id)
+                    } else {
+                      next.add(s.id)
+                    }
+                    return next
+                  })
+                }
+              />
             ))}
           </div>
         )}
