@@ -234,7 +234,7 @@ export function Exercises() {
                       <div
                         className="h-px"
                         style={{
-                          background: `linear-gradient(90deg, transparent, var(--color-${ex.category === "Upper Pull" ? "upper-pull" : ex.category === "Upper Push" ? "upper-push" : ex.category === "Mobility & Posture" ? "mobility" : ex.category === "Cardio & Conditioning" ? "cardio" : ex.category.toLowerCase()}-border), transparent)`,
+                          background: `linear-gradient(90deg, transparent, ${style.borderColor}, transparent)`,
                         }}
                       />
 
