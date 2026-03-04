@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { formatSet, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Calendar, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock } from "lucide-react"
+import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface WorkoutSet extends TrendSet {
@@ -45,6 +45,27 @@ function formatEnum(value: string): string {
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ")
 }
+
+const SESSION_SELECT = `
+  id, date, title, session_type, energy_level, energy_rating, body_state, time_of_day, location, notes,
+  workout_exercises (
+    id, exercise_name, section, position, notes,
+    workout_sets (
+      id, set_number, reps, weight, weight_unit,
+      duration_seconds, is_pr, notes
+    )
+  )
+`
+
+type ViewMode = "list" | "calendar"
+
+const SESSION_DOT_COLORS: Record<string, string> = {
+  workout: "bg-session-workout",
+  mobility: "bg-session-mobility",
+  mixed: "bg-session-mixed",
+}
+
+const DAY_HEADERS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 const SESSION_TYPE_STYLES: Record<string, string> = {
   workout: "bg-session-workout-bg text-session-workout font-bold",
@@ -373,26 +394,190 @@ function SessionCard({
   )
 }
 
+function formatDateStr(year: number, month: number, day: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+}
+
+function CalendarView() {
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
+  const [sessions, setSessions] = useState<WorkoutSession[]>([])
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
+
+  const year = currentMonth.getFullYear()
+  const month = currentMonth.getMonth()
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const firstDay = formatDateStr(year, month, 1)
+      const lastDayNum = new Date(year, month + 1, 0).getDate()
+      const lastDay = formatDateStr(year, month, lastDayNum)
+
+      const { data } = await supabase
+        .from("workout_sessions")
+        .select(SESSION_SELECT)
+        .gte("date", firstDay)
+        .lte("date", lastDay)
+        .order("date", { ascending: false })
+
+      setSessions(data ?? [])
+      setSelectedDate(null)
+      setExpandedSessionIds(new Set())
+      setLoading(false)
+    }
+    load()
+  }, [year, month])
+
+  const sessionsByDate = useMemo(() => {
+    const map = new Map<string, WorkoutSession[]>()
+    for (const s of sessions) {
+      const existing = map.get(s.date) ?? []
+      existing.push(s)
+      map.set(s.date, existing)
+    }
+    return map
+  }, [sessions])
+
+  const firstDayOfWeek = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  const cells: (number | null)[] = []
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const today = new Date()
+  const todayStr = formatDateStr(today.getFullYear(), today.getMonth(), today.getDate())
+
+  const selectedSessions = selectedDate ? (sessionsByDate.get(selectedDate) ?? []) : []
+
+  return (
+    <div>
+      {/* Month navigation */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => setCurrentMonth(new Date(year, month - 1, 1))}
+          className="p-2 rounded-lg hover:bg-bg-elevated text-text-muted hover:text-text-primary transition-colors"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <h2 className="text-text-primary font-semibold text-base m-0 font-mono">
+          {currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+        </h2>
+        <button
+          onClick={() => setCurrentMonth(new Date(year, month + 1, 1))}
+          className="p-2 rounded-lg hover:bg-bg-elevated text-text-muted hover:text-text-primary transition-colors"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {DAY_HEADERS.map((d) => (
+          <div key={d} className="text-center text-text-dim text-[10px] font-mono font-bold uppercase tracking-wider py-1">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className={cn("grid grid-cols-7 gap-1", loading && "opacity-50 pointer-events-none")}>
+        {cells.map((day, i) => {
+          if (day === null) return <div key={i} />
+
+          const dateStr = formatDateStr(year, month, day)
+          const daySessions = sessionsByDate.get(dateStr) ?? []
+          const isSelected = selectedDate === dateStr
+          const isToday = dateStr === todayStr
+
+          return (
+            <button
+              key={i}
+              onClick={() => setSelectedDate(isSelected ? null : dateStr)}
+              className={cn(
+                "aspect-square rounded-lg flex flex-col items-center justify-center gap-1 text-sm transition-all",
+                isSelected
+                  ? "bg-bg-elevated border border-border-hover"
+                  : "border border-transparent hover:bg-bg-elevated/50",
+                isToday && "ring-1 ring-core/50",
+                daySessions.length > 0 ? "text-text-primary font-medium" : "text-text-dim"
+              )}
+            >
+              <span className="text-[13px]">{day}</span>
+              {daySessions.length > 0 && (
+                <div className="flex gap-0.5">
+                  {daySessions.map((s, j) => (
+                    <div
+                      key={j}
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full",
+                        SESSION_DOT_COLORS[s.session_type] ?? "bg-text-muted"
+                      )}
+                    />
+                  ))}
+                </div>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Selected day sessions */}
+      {selectedDate && (
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-text-secondary text-sm font-medium">
+              {parseLocalDate(selectedDate).toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </span>
+            {selectedSessions.length === 0 && (
+              <span className="text-text-dim text-xs font-mono">— rest day</span>
+            )}
+          </div>
+          <div className="flex flex-col gap-3">
+            {selectedSessions.map((s) => (
+              <SessionCard
+                key={s.id}
+                session={s}
+                isSessionExpanded={expandedSessionIds.has(s.id)}
+                onToggleSession={() =>
+                  setExpandedSessionIds((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(s.id)) next.delete(s.id)
+                    else next.add(s.id)
+                    return next
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Workouts() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
+  const [viewMode, setViewMode] = useState<ViewMode>("list")
 
   useEffect(() => {
     async function load() {
       const { data, error } = await supabase
         .from("workout_sessions")
-        .select(`
-          id, date, title, session_type, energy_level, energy_rating, body_state, time_of_day, location, notes,
-          workout_exercises (
-            id, exercise_name, section, position, notes,
-            workout_sets (
-              id, set_number, reps, weight, weight_unit,
-              duration_seconds, is_pr, notes
-            )
-          )
-        `)
+        .select(SESSION_SELECT)
         .order("date", { ascending: false })
         .limit(20)
 
@@ -441,55 +626,87 @@ export function Workouts() {
       {/* Header */}
       <div className="border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
         <div className="max-w-2xl mx-auto px-5 pt-4 pb-4">
-          <div className="flex items-center gap-3 mb-1">
-            <Link
-              to="/"
-              className="text-text-muted hover:text-text-primary transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="flex items-baseline gap-2.5">
-              <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                Workout Sessions
-              </h1>
-              <span className="text-text-dim text-xs font-mono font-medium">
-                {sessions.length}
-              </span>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-3">
+              <Link
+                to="/"
+                className="text-text-muted hover:text-text-primary transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div className="flex items-baseline gap-2.5">
+                <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+                  Workout Sessions
+                </h1>
+                {viewMode === "list" && (
+                  <span className="text-text-dim text-xs font-mono font-medium">
+                    {sessions.length}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex rounded-lg border border-border-default overflow-hidden">
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "p-1.5 transition-colors",
+                  viewMode === "list"
+                    ? "bg-bg-elevated text-text-primary"
+                    : "text-text-dim hover:text-text-muted"
+                )}
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("calendar")}
+                className={cn(
+                  "p-1.5 transition-colors",
+                  viewMode === "calendar"
+                    ? "bg-bg-elevated text-text-primary"
+                    : "text-text-dim hover:text-text-muted"
+                )}
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
             </div>
           </div>
           <p className="text-text-dim text-xs ml-8">
-            Recent training history
+            {viewMode === "list" ? "Recent training history" : "Monthly overview"}
           </p>
         </div>
       </div>
 
-      {/* Sessions list */}
+      {/* Content */}
       <div className="max-w-2xl mx-auto px-5 py-4 pb-10">
-        {sessions.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-text-dim text-sm">No sessions logged yet.</p>
-          </div>
+        {viewMode === "list" ? (
+          sessions.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-text-dim text-sm">No sessions logged yet.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {sessions.map((s) => (
+                <SessionCard
+                  key={s.id}
+                  session={s}
+                  isSessionExpanded={expandedSessionIds.has(s.id)}
+                  onToggleSession={() =>
+                    setExpandedSessionIds((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(s.id)) {
+                        next.delete(s.id)
+                      } else {
+                        next.add(s.id)
+                      }
+                      return next
+                    })
+                  }
+                />
+              ))}
+            </div>
+          )
         ) : (
-          <div className="flex flex-col gap-3">
-            {sessions.map((s) => (
-              <SessionCard
-                key={s.id}
-                session={s}
-                isSessionExpanded={expandedSessionIds.has(s.id)}
-                onToggleSession={() =>
-                  setExpandedSessionIds((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(s.id)) {
-                      next.delete(s.id)
-                    } else {
-                      next.add(s.id)
-                    }
-                    return next
-                  })
-                }
-              />
-            ))}
-          </div>
+          <CalendarView />
         )}
       </div>
     </div>
