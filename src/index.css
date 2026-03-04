@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #0a0a12;
+  --color-bg-secondary: #13131d;
+  --color-bg-elevated: #1a1a2a;
+  --color-border-default: #2a2a3a;
+  --color-border-hover: #3a3a5a;
+  --color-text-primary: #e8e8f0;
+  --color-text-secondary: #c0c0cc;
+  --color-text-muted: #666;
+  --color-text-dim: #444;
+
+  --color-upper-pull: #5ec4e0;
+  --color-upper-pull-bg: #1a2f3a;
+  --color-upper-pull-border: #2d7d9a;
+  --color-upper-pull-tag: #0e2530;
+
+  --color-upper-push: #e05ec4;
+  --color-upper-push-bg: #2f1a2a;
+  --color-upper-push-border: #9a2d7d;
+  --color-upper-push-tag: #30102a;
+
+  --color-lower: #5ee06a;
+  --color-lower-bg: #1a2f1e;
+  --color-lower-border: #2d9a3d;
+  --color-lower-tag: #0e3015;
+
+  --color-core: #e0c45e;
+  --color-core-bg: #2f2a1a;
+  --color-core-border: #9a7d2d;
+  --color-core-tag: #302a0e;
+
+  --color-mobility: #5ed4e0;
+  --color-mobility-bg: #1a2a2f;
+  --color-mobility-border: #2d8a9a;
+  --color-mobility-tag: #0e2a30;
+
+  --color-grip: #c45ee0;
+  --color-grip-bg: #2a1a2f;
+  --color-grip-border: #7d2d9a;
+  --color-grip-tag: #2a0e30;
+
+  --color-cardio: #e08a5e;
+  --color-cardio-bg: #2f1f1a;
+  --color-cardio-border: #9a4d2d;
+  --color-cardio-tag: #301a0e;
+
+  --color-neck: #b0e05e;
+  --color-neck-bg: #1f2f1a;
+  --color-neck-border: #6d9a2d;
+  --color-neck-tag: #1a300e;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-primary text-text-primary font-sans antialiased;
+    margin: 0;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-default);
+    border-radius: 3px;
+  }
+}
