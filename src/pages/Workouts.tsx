@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { formatSet, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List } from "lucide-react"
+import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface WorkoutSet extends TrendSet {
@@ -398,7 +398,26 @@ function formatDateStr(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
 }
 
-function CalendarView() {
+function monthKey(y: number, m: number): string {
+  return `${y}-${String(m + 1).padStart(2, "0")}`
+}
+
+async function fetchMonth(y: number, m: number): Promise<WorkoutSession[]> {
+  const firstDay = formatDateStr(y, m, 1)
+  const lastDayNum = new Date(y, m + 1, 0).getDate()
+  const lastDay = formatDateStr(y, m, lastDayNum)
+
+  const { data } = await supabase
+    .from("workout_sessions")
+    .select(SESSION_SELECT)
+    .gte("date", firstDay)
+    .lte("date", lastDay)
+    .order("date", { ascending: false })
+
+  return data ?? []
+}
+
+function CalendarView({ refreshKey }: { refreshKey: number }) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
@@ -407,31 +426,53 @@ function CalendarView() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
+  const cache = useRef(new Map<string, WorkoutSession[]>())
 
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
 
   useEffect(() => {
+    let stale = false
+
     async function load() {
-      setLoading(true)
-      const firstDay = formatDateStr(year, month, 1)
-      const lastDayNum = new Date(year, month + 1, 0).getDate()
-      const lastDay = formatDateStr(year, month, lastDayNum)
+      const key = monthKey(year, month)
 
-      const { data } = await supabase
-        .from("workout_sessions")
-        .select(SESSION_SELECT)
-        .gte("date", firstDay)
-        .lte("date", lastDay)
-        .order("date", { ascending: false })
+      // On refresh, invalidate the entire cache so we get fresh data
+      if (refreshKey > 0) cache.current.clear()
 
-      setSessions(data ?? [])
-      setSelectedDate(null)
-      setExpandedSessionIds(new Set())
-      setLoading(false)
+      const cached = cache.current.get(key)
+
+      if (cached) {
+        setSessions(cached)
+        setSelectedDate(null)
+        setExpandedSessionIds(new Set())
+        setLoading(false)
+      } else {
+        setLoading(true)
+        const data = await fetchMonth(year, month)
+        if (stale) return
+        cache.current.set(key, data)
+        setSessions(data)
+        setSelectedDate(null)
+        setExpandedSessionIds(new Set())
+        setLoading(false)
+      }
+
+      // Prefetch adjacent months in the background
+      for (const offset of [-1, 1]) {
+        const adj = new Date(year, month + offset, 1)
+        const adjKey = monthKey(adj.getFullYear(), adj.getMonth())
+        if (!cache.current.has(adjKey)) {
+          fetchMonth(adj.getFullYear(), adj.getMonth()).then((data) => {
+            cache.current.set(adjKey, data)
+          })
+        }
+      }
     }
+
     load()
-  }, [year, month])
+    return () => { stale = true }
+  }, [year, month, refreshKey])
 
   const sessionsByDate = useMemo(() => {
     const map = new Map<string, WorkoutSession[]>()
@@ -572,6 +613,8 @@ export function Workouts() {
   const [error, setError] = useState<string | null>(null)
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<ViewMode>("list")
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -593,9 +636,10 @@ export function Workouts() {
         }
       }
       setLoading(false)
+      setRefreshing(false)
     }
     load()
-  }, [])
+  }, [refreshKey])
 
   if (loading) {
     return (
@@ -645,6 +689,16 @@ export function Workouts() {
                 )}
               </div>
             </div>
+            <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setRefreshing(true)
+                setRefreshKey((k) => k + 1)
+              }}
+              className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+            </button>
             <div className="flex rounded-lg border border-border-default overflow-hidden">
               <button
                 onClick={() => setViewMode("list")}
@@ -668,6 +722,7 @@ export function Workouts() {
               >
                 <Calendar className="w-4 h-4" />
               </button>
+            </div>
             </div>
           </div>
           <p className="text-text-dim text-xs ml-8">
@@ -706,7 +761,7 @@ export function Workouts() {
             </div>
           )
         ) : (
-          <CalendarView />
+          <CalendarView refreshKey={refreshKey} />
         )}
       </div>
     </div>
