@@ -431,11 +431,17 @@ function CalendarView({ refreshKey }: { refreshKey: number }) {
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
 
+  const prevMonth = useRef({ year, month })
+  const isMonthChange = prevMonth.current.year !== year || prevMonth.current.month !== month
+
   useEffect(() => {
     let stale = false
+    const shouldResetUI = isMonthChange
+    prevMonth.current = { year, month }
 
     async function load() {
       const key = monthKey(year, month)
+      const isRefresh = refreshKey > 0 && !shouldResetUI
 
       // On refresh, invalidate the entire cache so we get fresh data
       if (refreshKey > 0) cache.current.clear()
@@ -444,17 +450,22 @@ function CalendarView({ refreshKey }: { refreshKey: number }) {
 
       if (cached) {
         setSessions(cached)
-        setSelectedDate(null)
-        setExpandedSessionIds(new Set())
+        if (shouldResetUI) {
+          setSelectedDate(null)
+          setExpandedSessionIds(new Set())
+        }
         setLoading(false)
       } else {
-        setLoading(true)
+        // Only show loading spinner on initial load or month change, not refresh
+        if (!isRefresh) setLoading(true)
         const data = await fetchMonth(year, month)
         if (stale) return
         cache.current.set(key, data)
         setSessions(data)
-        setSelectedDate(null)
-        setExpandedSessionIds(new Set())
+        if (shouldResetUI) {
+          setSelectedDate(null)
+          setExpandedSessionIds(new Set())
+        }
         setLoading(false)
       }
 
@@ -617,6 +628,8 @@ export function Workouts() {
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
+    const isInitialLoad = refreshKey === 0
+
     async function load() {
       const { data, error } = await supabase
         .from("workout_sessions")
@@ -629,10 +642,12 @@ export function Workouts() {
       } else {
         const loaded = data ?? []
         setSessions(loaded)
-        // Default: most recent workout session expanded
-        const firstWorkout = loaded.find((s) => s.session_type === "workout")
-        if (firstWorkout) {
-          setExpandedSessionIds(new Set([firstWorkout.id]))
+        // Only set default expanded state on initial load
+        if (isInitialLoad) {
+          const firstWorkout = loaded.find((s) => s.session_type === "workout")
+          if (firstWorkout) {
+            setExpandedSessionIds(new Set([firstWorkout.id]))
+          }
         }
       }
       setLoading(false)
