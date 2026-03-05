@@ -788,7 +788,7 @@ export function Exercises() {
             {/* Sheet */}
             <div
               className={cn(
-                "relative w-full max-w-lg bg-bg-secondary rounded-t-2xl border-t border-x border-border-default max-h-[70vh] flex flex-col transition-transform duration-300 ease-out",
+                "relative w-full max-w-lg bg-bg-secondary rounded-t-2xl border-t border-x border-border-default min-h-[30vh] max-h-[70vh] flex flex-col transition-transform duration-300 ease-out",
                 sheetVisible ? "translate-y-0" : "translate-y-full"
               )}
             >
@@ -823,7 +823,7 @@ export function Exercises() {
               {/* Session list */}
               <div className="overflow-y-auto flex-1 overscroll-contain">
                 {sheetSessions.length > 0 ? (
-                  <div className="flex flex-col">
+                  <div className="flex flex-col pb-6">
                     {sheetSessions.map((s, i) => (
                       <Link
                         key={s.id}
