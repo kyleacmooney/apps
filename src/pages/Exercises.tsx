@@ -353,6 +353,8 @@ function ExerciseCard({
 
 export function Exercises() {
   const canGoForward = useCanGoForward()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [summaryMap, setSummaryMap] = useState<Map<string, ExerciseSummary>>(new Map())
   const [trendMap, setTrendMap] = useState<Map<string, ExerciseTrendSession[]>>(new Map())
@@ -360,7 +362,9 @@ export function Exercises() {
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
-  const [linkedExerciseName, setLinkedExerciseName] = useState<string | null>(null)
+  const [linkedExerciseName, setLinkedExerciseName] = useState<string | null>(
+    () => searchParams.get("exercise")
+  )
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [sessionHistoryOpenId, setSessionHistoryOpenId] = useState<string | null>(null)
@@ -370,8 +374,6 @@ export function Exercises() {
   const [sheetMountedId, setSheetMountedId] = useState<string | null>(null)
   const [sheetVisible, setSheetVisible] = useState(false)
   const sheetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
 
   // Sheet open: mount DOM, then trigger transition on next frame
   useEffect(() => {
@@ -494,17 +496,13 @@ export function Exercises() {
     load()
   }, [refreshKey])
 
-  // Deep-link from Workouts: read ?exercise= param, pin + expand that exercise
+  // Deep-link from Workouts: auto-expand the linked exercise once data loads
   useEffect(() => {
-    const exerciseParam = searchParams.get("exercise")
-    if (!exerciseParam || exercises.length === 0) return
-
-    setLinkedExerciseName(exerciseParam)
+    if (!linkedExerciseName || exercises.length === 0) return
     const match = exercises.find(
-      (ex) => ex.name.toLowerCase() === exerciseParam.toLowerCase()
+      (ex) => ex.name.toLowerCase() === linkedExerciseName.toLowerCase()
     )
     if (match) setExpandedId(match.id)
-    // URL param is preserved — no setSearchParams call
   }, [exercises]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {

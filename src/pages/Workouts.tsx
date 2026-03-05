@@ -122,7 +122,7 @@ function ExerciseRow({
           <Link
             to={`/exercises?exercise=${encodeURIComponent(exercise.exercise_name)}`}
             onClick={(e) => e.stopPropagation()}
-            className="text-text-primary text-[13.5px] font-medium truncate hover:text-core transition-colors"
+            className="text-text-primary text-[13.5px] font-medium truncate transition-colors hover:text-core active:text-core active:bg-core/10 rounded px-1 -mx-1 py-0.5"
           >
             {exercise.exercise_name}
           </Link>
