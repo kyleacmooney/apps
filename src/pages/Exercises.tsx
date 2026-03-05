@@ -35,6 +35,11 @@ interface ExerciseSummary {
   } | null
   best_duration_seconds: number | null
   max_weight: number | null
+  best_weight_set: {
+    weight: number
+    weight_unit: string
+    reps: number
+  } | null
 }
 
 interface ExerciseTrendSession {
@@ -391,10 +396,13 @@ export function Exercises() {
                             </span>
                           </>
                         )}
-                        {!summary.latest_pr?.reps && summary.best_duration_seconds == null && summary.max_weight != null && (
+                        {!summary.latest_pr?.reps && summary.best_duration_seconds == null && summary.best_weight_set != null && (
                           <>
                             <span className="opacity-40">·</span>
-                            <span>Max: {summary.max_weight}lb</span>
+                            <span className="flex items-center gap-1 text-core">
+                              <Trophy className="w-3 h-3" />
+                              PR: {summary.best_weight_set.reps} × {summary.best_weight_set.weight}{summary.best_weight_set.weight_unit}
+                            </span>
                           </>
                         )}
                       </div>
