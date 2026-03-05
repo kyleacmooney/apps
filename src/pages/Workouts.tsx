@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
-import { formatSet, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown } from "lucide-react"
+import { formatSet, parseLocalDate, getWeekStartStr, getWeekLabel, type TrendSet } from "@/lib/workout-utils"
+import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface WorkoutSet extends TrendSet {
@@ -30,12 +30,6 @@ interface WorkoutSession {
   location: string | null
   notes: string | null
   workout_exercises: WorkoutExercise[]
-}
-
-/** Parse a date-only string (YYYY-MM-DD) as local time, not UTC. */
-function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number)
-  return new Date(y, m - 1, d)
 }
 
 /** Format a snake_case enum value for display: "full_send" → "Full Send" */
@@ -190,10 +184,12 @@ function SessionCard({
   session,
   isSessionExpanded,
   onToggleSession,
+  isHighlighted: isDeepLinked = false,
 }: {
   session: WorkoutSession
   isSessionExpanded: boolean
   onToggleSession: () => void
+  isHighlighted?: boolean
 }) {
   const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<string>>(new Set())
   const [highlighted, setHighlighted] = useState(false)
@@ -239,7 +235,10 @@ function SessionCard({
         if (e.target === e.currentTarget) onToggleSession()
       }}
       className={cn(
-        "rounded-xl bg-bg-secondary border border-border-default transition-all duration-300",
+        "rounded-xl bg-bg-secondary border transition-all duration-300",
+        isDeepLinked
+          ? "border-core/50 ring-1 ring-core/30"
+          : "border-border-default",
         isNonWorkout && !isSessionExpanded
           ? cn("py-2 px-4 sm:px-5", !highlighted && "opacity-60")
           : "p-4 sm:p-5"
@@ -661,6 +660,9 @@ function CalendarView({
   )
 }
 
+const PAGE_SIZE = 30
+const SESSION_TYPES = ["all", "workout", "mobility", "mixed"] as const
+
 export function Workouts() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([])
   const [loading, setLoading] = useState(true)
@@ -671,24 +673,45 @@ export function Workouts() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
+  // Pagination
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const pageOffset = useRef(0)
+
+  // Session type filter
+  const [activeFilter, setActiveFilter] = useState<string>("all")
+
+  // Deep-link
+  const [linkedSession, setLinkedSession] = useState<WorkoutSession | null>(null)
+  const [linkedSessionLoading, setLinkedSessionLoading] = useState(false)
+
+  // Fetch a page of sessions
+  const fetchPage = useCallback(async (offset: number) => {
+    const { data, error } = await supabase
+      .from("workout_sessions")
+      .select(SESSION_SELECT)
+      .order("date", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1)
+
+    return { data: data ?? [], error }
+  }, [])
+
+  // Initial load
   useEffect(() => {
     const isInitialLoad = refreshKey === 0
 
     async function load() {
-      const { data, error } = await supabase
-        .from("workout_sessions")
-        .select(SESSION_SELECT)
-        .order("date", { ascending: false })
-        .limit(20)
+      pageOffset.current = 0
+      const { data, error: fetchError } = await fetchPage(0)
 
-      if (error) {
-        setError(error.message)
+      if (fetchError) {
+        setError(fetchError.message)
       } else {
-        const loaded = data ?? []
-        setSessions(loaded)
-        // Only set default expanded state on initial load
-        if (isInitialLoad) {
-          const firstWorkout = loaded.find((s) => s.session_type === "workout")
+        setSessions(data)
+        setHasMore(data.length >= PAGE_SIZE)
+        pageOffset.current = data.length
+        if (isInitialLoad && !searchParams.get("session")) {
+          const firstWorkout = data.find((s) => s.session_type === "workout")
           if (firstWorkout) {
             setExpandedSessionIds(new Set([firstWorkout.id]))
           }
@@ -698,7 +721,98 @@ export function Workouts() {
       setRefreshing(false)
     }
     load()
-  }, [refreshKey])
+  }, [refreshKey, fetchPage])
+
+  // Deep-link: read ?session= param on mount
+  useEffect(() => {
+    const sessionId = searchParams.get("session")
+    if (!sessionId) return
+
+    setLinkedSessionLoading(true)
+
+    supabase
+      .from("workout_sessions")
+      .select(SESSION_SELECT)
+      .eq("id", sessionId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setLinkedSession(data as WorkoutSession)
+          setExpandedSessionIds((prev) => new Set([...prev, data.id]))
+        }
+        setLinkedSessionLoading(false)
+      })
+
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load more handler
+  async function handleLoadMore() {
+    setLoadingMore(true)
+    const { data } = await fetchPage(pageOffset.current)
+    setSessions((prev) => [...prev, ...data])
+    setHasMore(data.length >= PAGE_SIZE)
+    pageOffset.current += data.length
+    setLoadingMore(false)
+  }
+
+  // Compute dynamic type list (includes any unexpected types from data)
+  const allTypes = useMemo(() => {
+    const seen = new Set(sessions.map((s) => s.session_type))
+    const extras = [...seen].filter(
+      (t) => !(SESSION_TYPES as readonly string[]).includes(t)
+    )
+    return [...SESSION_TYPES, ...extras]
+  }, [sessions])
+
+  // Type counts for filter pills
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: sessions.length }
+    for (const s of sessions) {
+      counts[s.session_type] = (counts[s.session_type] ?? 0) + 1
+    }
+    return counts
+  }, [sessions])
+
+  // Week-grouped sessions (with filter applied)
+  const weekGroups = useMemo(() => {
+    let filtered = activeFilter === "all"
+      ? sessions
+      : sessions.filter((s) => s.session_type === activeFilter)
+
+    // Exclude linked session from timeline to avoid duplication
+    if (linkedSession) {
+      filtered = filtered.filter((s) => s.id !== linkedSession.id)
+    }
+
+    const groups = new Map<string, WorkoutSession[]>()
+    for (const session of filtered) {
+      const weekKey = getWeekStartStr(session.date)
+      if (!groups.has(weekKey)) groups.set(weekKey, [])
+      groups.get(weekKey)!.push(session)
+    }
+
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => b.localeCompare(a)) // desc by week start
+      .map(([weekStart, weekSessions]) => ({
+        key: weekStart,
+        label: getWeekLabel(weekStart),
+        sessions: weekSessions, // already sorted desc from query
+      }))
+  }, [sessions, activeFilter, linkedSession])
+
+  const filteredCount = useMemo(() => {
+    if (activeFilter === "all") return sessions.length
+    return sessions.filter((s) => s.session_type === activeFilter).length
+  }, [sessions, activeFilter])
+
+  const toggleSession = useCallback((id: string) => {
+    setExpandedSessionIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
 
   if (loading) {
     return (
@@ -726,8 +840,11 @@ export function Workouts() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      {/* Header */}
-      <div className="border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
+      {/* Header — sticky in list view */}
+      <div className={cn(
+        "border-b border-border-default bg-bg-primary/95 backdrop-blur-sm z-10",
+        viewMode === "list" && "sticky top-0"
+      )}>
         <div className="max-w-2xl mx-auto px-5 pt-4 pb-4">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-3">
@@ -743,7 +860,9 @@ export function Workouts() {
                 </h1>
                 {viewMode === "list" && (
                   <span className="text-text-dim text-xs font-mono font-medium">
-                    {sessions.length}
+                    {activeFilter === "all"
+                      ? sessions.length
+                      : `${filteredCount} / ${sessions.length}`}
                   </span>
                 )}
               </div>
@@ -784,41 +903,149 @@ export function Workouts() {
             </div>
             </div>
           </div>
-          <p className="text-text-dim text-xs ml-8">
+          <p className="text-text-dim text-xs ml-8 mb-0">
             {viewMode === "list" ? "Recent training history" : "Monthly overview"}
           </p>
+
+          {/* Session type filter pills — list view only */}
+          {viewMode === "list" && (
+            <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
+              {allTypes.map((type) => {
+                const isActive = activeFilter === type
+                const count = typeCounts[type] ?? 0
+                const style = type !== "all" ? SESSION_TYPE_STYLES[type] : null
+
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setActiveFilter(type)}
+                    className={cn(
+                      "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer whitespace-nowrap capitalize",
+                      isActive && style
+                        ? `${style} border-transparent`
+                        : isActive
+                          ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
+                          : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+                    )}
+                  >
+                    {formatEnum(type)}
+                    <span className="ml-1.5 opacity-60 font-mono text-[11px]">{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div className="max-w-2xl mx-auto px-5 py-4 pb-10">
         {viewMode === "list" ? (
-          sessions.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-text-dim text-sm">No sessions logged yet.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {sessions.map((s) => (
+          <>
+            {/* Deep-linked session */}
+            {linkedSessionLoading && (
+              <div className="mb-4 p-4 rounded-xl border border-border-default bg-bg-secondary animate-pulse">
+                <div className="h-4 bg-bg-elevated rounded w-1/3 mb-2" />
+                <div className="h-3 bg-bg-elevated rounded w-1/2" />
+              </div>
+            )}
+
+            {linkedSession && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-text-dim text-[11px] font-bold font-mono uppercase tracking-widest">
+                    Linked Session
+                  </span>
+                  <div className="flex-1 h-px bg-border-default" />
+                  <button
+                    onClick={() => {
+                      setExpandedSessionIds((prev) => {
+                        const next = new Set(prev)
+                        next.delete(linkedSession.id)
+                        return next
+                      })
+                      setLinkedSession(null)
+                      const next = new URLSearchParams(searchParams)
+                      next.delete("session")
+                      setSearchParams(next, { replace: true })
+                    }}
+                    className="text-text-dim hover:text-text-muted transition-colors p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <SessionCard
-                  key={s.id}
-                  session={s}
-                  isSessionExpanded={expandedSessionIds.has(s.id)}
-                  onToggleSession={() =>
-                    setExpandedSessionIds((prev) => {
-                      const next = new Set(prev)
-                      if (next.has(s.id)) {
-                        next.delete(s.id)
-                      } else {
-                        next.add(s.id)
-                      }
-                      return next
-                    })
-                  }
+                  session={linkedSession}
+                  isSessionExpanded={expandedSessionIds.has(linkedSession.id)}
+                  onToggleSession={() => toggleSession(linkedSession.id)}
+                  isHighlighted
                 />
-              ))}
-            </div>
-          )
+              </div>
+            )}
+
+            {/* Week-grouped timeline */}
+            {weekGroups.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-text-dim text-sm">
+                  {sessions.length === 0
+                    ? "No sessions logged yet."
+                    : "No sessions match this filter."}
+                </p>
+                {activeFilter !== "all" && sessions.length > 0 && (
+                  <button
+                    onClick={() => setActiveFilter("all")}
+                    className="text-core text-sm mt-2 hover:underline"
+                  >
+                    Show all sessions
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                {weekGroups.map((group) => (
+                  <div key={group.key}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-text-dim text-[11px] font-bold font-mono uppercase tracking-widest whitespace-nowrap">
+                        {group.label}
+                      </span>
+                      <div className="flex-1 h-px bg-border-default" />
+                      <span className="text-text-dim text-[11px] font-mono">
+                        {group.sessions.length}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {group.sessions.map((s) => (
+                        <SessionCard
+                          key={s.id}
+                          session={s}
+                          isSessionExpanded={expandedSessionIds.has(s.id)}
+                          onToggleSession={() => toggleSession(s.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Load more */}
+            {hasMore && (
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="w-full mt-6 py-3 rounded-xl border border-border-default bg-bg-secondary text-text-muted text-sm font-semibold hover:bg-bg-elevated hover:text-text-secondary transition-all disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </span>
+                ) : (
+                  "Load earlier sessions"
+                )}
+              </button>
+            )}
+          </>
         ) : (
           <CalendarView
             refreshKey={refreshKey}

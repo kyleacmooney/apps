@@ -1,3 +1,45 @@
+/** Parse a date-only string (YYYY-MM-DD) as local time, not UTC. */
+export function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
+
+/** Get the Monday (week start) for a given YYYY-MM-DD date string. Returns YYYY-MM-DD. */
+export function getWeekStartStr(dateStr: string): string {
+  const date = parseLocalDate(dateStr)
+  const day = date.getDay()
+  const diff = day === 0 ? 6 : day - 1 // Monday = 0 offset
+  date.setDate(date.getDate() - diff)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+}
+
+/** Human-readable label for a week starting on the given Monday (YYYY-MM-DD). */
+export function getWeekLabel(weekStartStr: string): string {
+  const weekStart = parseLocalDate(weekStartStr)
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+
+  const todayWeekStart = (() => {
+    const d = new Date(now)
+    const day = d.getDay()
+    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+    return d
+  })()
+
+  const diffMs = todayWeekStart.getTime() - weekStart.getTime()
+  const diffWeeks = Math.round(diffMs / (7 * 86400000))
+
+  if (diffWeeks === 0) return "This Week"
+  if (diffWeeks === 1) return "Last Week"
+
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekEnd.getDate() + 6)
+
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  return `${fmt(weekStart)} \u2013 ${fmt(weekEnd)}`
+}
+
 export interface TrendSet {
   set_number: number
   reps: number | null

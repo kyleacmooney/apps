@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
-import { formatSet, formatDuration, relativeDate, type TrendSet } from "@/lib/workout-utils"
+import { formatSet, formatDuration, relativeDate, parseLocalDate, type TrendSet } from "@/lib/workout-utils"
 import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -66,9 +66,253 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "total_sessions", label: "Most Used" },
 ]
 
-function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number)
-  return new Date(y, m - 1, d)
+
+function ExerciseCard({
+  exercise,
+  isExpanded,
+  onToggle,
+  summary,
+  trendSessions,
+  walkthroughExpandedId,
+  onToggleWalkthrough,
+  isHighlighted = false,
+}: {
+  exercise: Exercise
+  isExpanded: boolean
+  onToggle: () => void
+  summary: ExerciseSummary | undefined
+  trendSessions: ExerciseTrendSession[] | undefined
+  walkthroughExpandedId: string | null
+  onToggleWalkthrough: (id: string | null) => void
+  isHighlighted?: boolean
+}) {
+  const style = getCategoryStyle(exercise.category)
+  const sections = DETAIL_SECTIONS.filter((s) => exercise[s.key])
+  const hasBeenPerformed = summary && summary.total_sessions > 0
+
+  return (
+    <div
+      onClick={() => onToggle()}
+      className={cn(
+        "rounded-xl border cursor-pointer transition-all duration-200 overflow-hidden",
+        isHighlighted
+          ? `${style.bg} border-core/50 ring-1 ring-core/30`
+          : isExpanded
+            ? `${style.bg} ${style.border}`
+            : "bg-bg-secondary border-border-default"
+      )}
+    >
+      {/* Card header */}
+      <div className="px-4 py-3.5 sm:px-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              className={cn(
+                "shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md",
+                style.tag
+              )}
+            >
+              {exercise.category}
+            </span>
+            <span className={cn(
+              "text-[15px] font-semibold truncate",
+              hasBeenPerformed ? "text-text-primary" : "text-text-muted"
+            )}>
+              {exercise.name}
+            </span>
+          </div>
+          <ChevronDown
+            className={cn(
+              "w-4 h-4 text-text-dim shrink-0 ml-3 transition-transform duration-200",
+              isExpanded && "rotate-180"
+            )}
+          />
+        </div>
+
+        {/* Stats row — only when exercise has been performed */}
+        {hasBeenPerformed && (
+          <div className="flex items-center gap-1.5 mt-1.5 ml-[calc(0.625rem+theme(spacing.2.5))] text-text-dim text-[11px] font-mono flex-wrap">
+            <span>{summary.total_sessions} {summary.total_sessions === 1 ? "session" : "sessions"}</span>
+            {summary.last_performed && (
+              <>
+                <span className="opacity-40">·</span>
+                <span>Last {relativeDate(summary.last_performed)}</span>
+              </>
+            )}
+            {summary.latest_pr && summary.latest_pr.reps != null && summary.latest_pr.weight != null && (
+              <>
+                <span className="opacity-40">·</span>
+                <span className="flex items-center gap-1 text-core">
+                  <Trophy className="w-3 h-3" />
+                  PR: {summary.latest_pr.reps} × {summary.latest_pr.weight}{summary.latest_pr.weight_unit}
+                </span>
+              </>
+            )}
+            {summary.best_duration_seconds != null && (
+              <>
+                <span className="opacity-40">·</span>
+                <span className={cn("flex items-center gap-1", summary.latest_pr && "text-core")}>
+                  {summary.latest_pr && <Trophy className="w-3 h-3" />}
+                  Best: {formatDuration(summary.best_duration_seconds)}
+                </span>
+              </>
+            )}
+            {!summary.latest_pr?.reps && summary.best_duration_seconds == null && summary.best_weight_set != null && (
+              <>
+                <span className="opacity-40">·</span>
+                <span className="flex items-center gap-1 text-core">
+                  <Trophy className="w-3 h-3" />
+                  PR: {summary.best_weight_set.reps} × {summary.best_weight_set.weight}{summary.best_weight_set.weight_unit}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="px-4 pb-4 sm:px-5 sm:pb-5 flex flex-col gap-3.5">
+          <div
+            className="h-px"
+            style={{
+              background: `linear-gradient(90deg, transparent, ${style.borderColor}, transparent)`,
+            }}
+          />
+
+          {/* Latest Session */}
+          {trendSessions && trendSessions.length > 0 && (() => {
+            const latest = trendSessions[0]
+            const displayableSets = latest.sets.filter(
+              (s) => s.reps != null || s.duration_seconds != null
+            )
+            if (displayableSets.length === 0) return null
+            return (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <History className={cn("w-3.5 h-3.5", style.text)} />
+                  <span
+                    className={cn(
+                      "text-xs font-bold font-mono uppercase tracking-wider",
+                      style.text
+                    )}
+                  >
+                    Latest Session
+                  </span>
+                  <span className="text-text-dim text-[11px] font-mono">
+                    {parseLocalDate(latest.date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
+                <div className="pl-5 flex flex-col gap-0.5">
+                  {displayableSets.map((set) => (
+                    <div
+                      key={set.set_number}
+                      className="flex items-baseline gap-2 text-[12.5px] font-mono"
+                    >
+                      <span className="text-text-dim w-4 text-right shrink-0">
+                        {set.set_number})
+                      </span>
+                      <span className="text-text-secondary whitespace-nowrap shrink-0">
+                        {formatSet(set)}
+                      </span>
+                      {set.is_pr && (
+                        <span className="text-core text-[10px] font-bold uppercase tracking-wider">
+                          PR
+                        </span>
+                      )}
+                      {set.notes && (
+                        <span className="text-text-dim text-[11px] font-sans italic">
+                          — {set.notes}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          {sections.map((section) => {
+            const Icon = section.icon
+            return (
+              <div key={section.key}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Icon className={cn("w-3.5 h-3.5", style.text)} />
+                  <span
+                    className={cn(
+                      "text-xs font-bold font-mono uppercase tracking-wider",
+                      style.text
+                    )}
+                  >
+                    {section.label}
+                  </span>
+                </div>
+                <p className="text-text-secondary text-[13.5px] leading-relaxed m-0 pl-5">
+                  {exercise[section.key]}
+                </p>
+              </div>
+            )
+          })}
+
+          {/* Detailed Walkthrough — collapsible */}
+          {exercise.detailed_walkthrough && (() => {
+            const isWtExpanded = walkthroughExpandedId === exercise.id
+            return (
+              <div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleWalkthrough(isWtExpanded ? null : exercise.id)
+                  }}
+                  className="flex items-center gap-1.5 w-full text-left cursor-pointer bg-transparent border-none p-0"
+                >
+                  <BookOpen className={cn("w-3.5 h-3.5 transition-colors", isWtExpanded ? style.text : "text-text-dim")} />
+                  <span
+                    className={cn(
+                      "text-xs font-bold font-mono uppercase tracking-wider transition-colors",
+                      isWtExpanded ? style.text : "text-text-dim"
+                    )}
+                  >
+                    Detailed Walkthrough
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "w-3 h-3 text-text-dim transition-transform duration-200",
+                      isWtExpanded && "rotate-180"
+                    )}
+                  />
+                </button>
+                {isWtExpanded && (
+                  <div className="pl-5 mt-1.5">
+                    {exercise.detailed_walkthrough!.split("\n").map((line, i) => (
+                      line.trim() === "" ? (
+                        <div key={i} className="h-2.5" />
+                      ) : (
+                        <p key={i} className="text-text-secondary text-[13.5px] leading-relaxed m-0">
+                          {line}
+                        </p>
+                      )
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          <div className="text-text-dim text-[11px] font-mono pt-1 border-t border-border-default">
+            Updated{" "}
+            {new Date(exercise.updated_at).toLocaleDateString(
+              "en-US",
+              { month: "short", day: "numeric", year: "numeric" }
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function Exercises() {
@@ -79,6 +323,7 @@ export function Exercises() {
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
+  const [linkedExerciseName, setLinkedExerciseName] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -91,12 +336,22 @@ export function Exercises() {
 
   const PARAM_DEFAULTS: Record<string, string> = { q: "", cat: "All", sort: "last_performed" }
 
+  const linkedExercise = useMemo(() => {
+    if (!linkedExerciseName) return null
+    return exercises.find(
+      (ex) => ex.name.toLowerCase() === linkedExerciseName.toLowerCase()
+    ) ?? null
+  }, [linkedExerciseName, exercises])
+
   function updateParams(updates: Record<string, string | null>) {
     const next = new URLSearchParams(searchParams)
     for (const [k, v] of Object.entries(updates)) {
       if (v && v !== PARAM_DEFAULTS[k]) next.set(k, v)
       else next.delete(k)
     }
+    // Clear deep-link when user interacts with search/filter/sort
+    next.delete("exercise")
+    setLinkedExerciseName(null)
     setSearchParams(next, { replace: true })
   }
 
@@ -139,22 +394,23 @@ export function Exercises() {
     load()
   }, [refreshKey])
 
-  // Deep-link from Workouts: read ?exercise= param, search + expand that exercise
+  // Deep-link from Workouts: read ?exercise= param, pin + expand that exercise
   useEffect(() => {
     const exerciseParam = searchParams.get("exercise")
     if (!exerciseParam || exercises.length === 0) return
 
+    setLinkedExerciseName(exerciseParam)
     const match = exercises.find(
       (ex) => ex.name.toLowerCase() === exerciseParam.toLowerCase()
     )
     if (match) setExpandedId(match.id)
-
-    // Replace exercise param with q/cat params, clearing the deep-link
-    setSearchParams({ q: exerciseParam, cat: "All" }, { replace: true })
-  }, [exercises])
+    // URL param is preserved — no setSearchParams call
+  }, [exercises]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     const base = exercises.filter((ex) => {
+      // Exclude linked exercise from normal list to avoid duplication
+      if (linkedExercise && ex.id === linkedExercise.id) return false
       const matchesCategory =
         activeCategory === "All" || ex.category === activeCategory
       const q = search.toLowerCase()
@@ -185,7 +441,7 @@ export function Exercises() {
       if (aCount === bCount) return a.name.localeCompare(b.name)
       return bCount - aCount
     })
-  }, [exercises, activeCategory, search, sortBy, summaryMap])
+  }, [exercises, activeCategory, search, sortBy, summaryMap, linkedExercise])
 
   const categoryCounts = useMemo(() => {
     return exercises.reduce<Record<string, number>>((acc, ex) => {
@@ -337,6 +593,42 @@ export function Exercises() {
 
       {/* Exercise list */}
       <div className="max-w-2xl mx-auto px-5 py-4 pb-10">
+        {/* Linked exercise section */}
+        {linkedExercise && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-text-dim text-[11px] font-bold font-mono uppercase tracking-widest">
+                Linked Exercise
+              </span>
+              <div className="flex-1 h-px bg-border-default" />
+              <button
+                onClick={() => {
+                  setLinkedExerciseName(null)
+                  const next = new URLSearchParams(searchParams)
+                  next.delete("exercise")
+                  setSearchParams(next, { replace: true })
+                }}
+                className="text-text-dim hover:text-text-muted transition-colors p-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <ExerciseCard
+              exercise={linkedExercise}
+              isExpanded={expandedId === linkedExercise.id}
+              onToggle={() => {
+                setExpandedId(expandedId === linkedExercise.id ? null : linkedExercise.id)
+                if (expandedId === linkedExercise.id) setWalkthroughExpandedId(null)
+              }}
+              summary={summaryMap.get(linkedExercise.id)}
+              trendSessions={trendMap.get(linkedExercise.id)}
+              walkthroughExpandedId={walkthroughExpandedId}
+              onToggleWalkthrough={setWalkthroughExpandedId}
+              isHighlighted
+            />
+          </div>
+        )}
+
         {filtered.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-text-dim text-sm">
@@ -346,242 +638,21 @@ export function Exercises() {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {filtered.map((ex) => {
-              const style = getCategoryStyle(ex.category)
-              const isExpanded = expandedId === ex.id
-              const sections = DETAIL_SECTIONS.filter(
-                (s) => ex[s.key]
-              )
-              const summary = summaryMap.get(ex.id)
-              const hasBeenPerformed = summary && summary.total_sessions > 0
-              const trendSessions = trendMap.get(ex.id)
-
-              return (
-                <div
-                  key={ex.id}
-                  onClick={() => {
-                    setExpandedId(isExpanded ? null : ex.id)
-                    if (isExpanded) setWalkthroughExpandedId(null)
-                  }}
-                  className={cn(
-                    "rounded-xl border cursor-pointer transition-all duration-200 overflow-hidden",
-                    isExpanded
-                      ? `${style.bg} ${style.border}`
-                      : "bg-bg-secondary border-border-default"
-                  )}
-                >
-                  {/* Card header */}
-                  <div className="px-4 py-3.5 sm:px-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span
-                          className={cn(
-                            "shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md",
-                            style.tag
-                          )}
-                        >
-                          {ex.category}
-                        </span>
-                        <span className={cn(
-                          "text-[15px] font-semibold truncate",
-                          hasBeenPerformed ? "text-text-primary" : "text-text-muted"
-                        )}>
-                          {ex.name}
-                        </span>
-                      </div>
-                      <ChevronDown
-                        className={cn(
-                          "w-4 h-4 text-text-dim shrink-0 ml-3 transition-transform duration-200",
-                          isExpanded && "rotate-180"
-                        )}
-                      />
-                    </div>
-
-                    {/* Stats row — only when exercise has been performed */}
-                    {hasBeenPerformed && (
-                      <div className="flex items-center gap-1.5 mt-1.5 ml-[calc(0.625rem+theme(spacing.2.5))] text-text-dim text-[11px] font-mono flex-wrap">
-                        <span>{summary.total_sessions} {summary.total_sessions === 1 ? "session" : "sessions"}</span>
-                        {summary.last_performed && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span>Last {relativeDate(summary.last_performed)}</span>
-                          </>
-                        )}
-                        {summary.latest_pr && summary.latest_pr.reps != null && summary.latest_pr.weight != null && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span className="flex items-center gap-1 text-core">
-                              <Trophy className="w-3 h-3" />
-                              PR: {summary.latest_pr.reps} × {summary.latest_pr.weight}{summary.latest_pr.weight_unit}
-                            </span>
-                          </>
-                        )}
-                        {summary.best_duration_seconds != null && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span className={cn("flex items-center gap-1", summary.latest_pr && "text-core")}>
-                              {summary.latest_pr && <Trophy className="w-3 h-3" />}
-                              Best: {formatDuration(summary.best_duration_seconds)}
-                            </span>
-                          </>
-                        )}
-                        {!summary.latest_pr?.reps && summary.best_duration_seconds == null && summary.best_weight_set != null && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span className="flex items-center gap-1 text-core">
-                              <Trophy className="w-3 h-3" />
-                              PR: {summary.best_weight_set.reps} × {summary.best_weight_set.weight}{summary.best_weight_set.weight_unit}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Expanded content */}
-                  {isExpanded && (
-                    <div className="px-4 pb-4 sm:px-5 sm:pb-5 flex flex-col gap-3.5">
-                      <div
-                        className="h-px"
-                        style={{
-                          background: `linear-gradient(90deg, transparent, ${style.borderColor}, transparent)`,
-                        }}
-                      />
-
-                      {/* Latest Session */}
-                      {trendSessions && trendSessions.length > 0 && (() => {
-                        const latest = trendSessions[0]
-                        const displayableSets = latest.sets.filter(
-                          (s) => s.reps != null || s.duration_seconds != null
-                        )
-                        if (displayableSets.length === 0) return null
-                        return (
-                          <div>
-                            <div className="flex items-center gap-1.5 mb-2">
-                              <History className={cn("w-3.5 h-3.5", style.text)} />
-                              <span
-                                className={cn(
-                                  "text-xs font-bold font-mono uppercase tracking-wider",
-                                  style.text
-                                )}
-                              >
-                                Latest Session
-                              </span>
-                              <span className="text-text-dim text-[11px] font-mono">
-                                {parseLocalDate(latest.date).toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                })}
-                              </span>
-                            </div>
-                            <div className="pl-5 flex flex-col gap-0.5">
-                              {displayableSets.map((set) => (
-                                <div
-                                  key={set.set_number}
-                                  className="flex items-baseline gap-2 text-[12.5px] font-mono"
-                                >
-                                  <span className="text-text-dim w-4 text-right shrink-0">
-                                    {set.set_number})
-                                  </span>
-                                  <span className="text-text-secondary whitespace-nowrap shrink-0">
-                                    {formatSet(set)}
-                                  </span>
-                                  {set.is_pr && (
-                                    <span className="text-core text-[10px] font-bold uppercase tracking-wider">
-                                      PR
-                                    </span>
-                                  )}
-                                  {set.notes && (
-                                    <span className="text-text-dim text-[11px] font-sans italic">
-                                      — {set.notes}
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      })()}
-
-                      {sections.map((section) => {
-                        const Icon = section.icon
-                        return (
-                          <div key={section.key}>
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                              <Icon className={cn("w-3.5 h-3.5", style.text)} />
-                              <span
-                                className={cn(
-                                  "text-xs font-bold font-mono uppercase tracking-wider",
-                                  style.text
-                                )}
-                              >
-                                {section.label}
-                              </span>
-                            </div>
-                            <p className="text-text-secondary text-[13.5px] leading-relaxed m-0 pl-5">
-                              {ex[section.key]}
-                            </p>
-                          </div>
-                        )
-                      })}
-
-                      {/* Detailed Walkthrough — collapsible */}
-                      {ex.detailed_walkthrough && (() => {
-                        const isWtExpanded = walkthroughExpandedId === ex.id
-                        return (
-                          <div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setWalkthroughExpandedId(isWtExpanded ? null : ex.id)
-                              }}
-                              className="flex items-center gap-1.5 w-full text-left cursor-pointer bg-transparent border-none p-0"
-                            >
-                              <BookOpen className={cn("w-3.5 h-3.5 transition-colors", isWtExpanded ? style.text : "text-text-dim")} />
-                              <span
-                                className={cn(
-                                  "text-xs font-bold font-mono uppercase tracking-wider transition-colors",
-                                  isWtExpanded ? style.text : "text-text-dim"
-                                )}
-                              >
-                                Detailed Walkthrough
-                              </span>
-                              <ChevronDown
-                                className={cn(
-                                  "w-3 h-3 text-text-dim transition-transform duration-200",
-                                  isWtExpanded && "rotate-180"
-                                )}
-                              />
-                            </button>
-                            {isWtExpanded && (
-                              <div className="pl-5 mt-1.5">
-                                {ex.detailed_walkthrough!.split("\n").map((line, i) => (
-                                  line.trim() === "" ? (
-                                    <div key={i} className="h-2.5" />
-                                  ) : (
-                                    <p key={i} className="text-text-secondary text-[13.5px] leading-relaxed m-0">
-                                      {line}
-                                    </p>
-                                  )
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
-
-                      <div className="text-text-dim text-[11px] font-mono pt-1 border-t border-border-default">
-                        Updated{" "}
-                        {new Date(ex.updated_at).toLocaleDateString(
-                          "en-US",
-                          { month: "short", day: "numeric", year: "numeric" }
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+            {filtered.map((ex) => (
+              <ExerciseCard
+                key={ex.id}
+                exercise={ex}
+                isExpanded={expandedId === ex.id}
+                onToggle={() => {
+                  setExpandedId(expandedId === ex.id ? null : ex.id)
+                  if (expandedId === ex.id) setWalkthroughExpandedId(null)
+                }}
+                summary={summaryMap.get(ex.id)}
+                trendSessions={trendMap.get(ex.id)}
+                walkthroughExpandedId={walkthroughExpandedId}
+                onToggleWalkthrough={setWalkthroughExpandedId}
+              />
+            ))}
           </div>
         )}
       </div>
