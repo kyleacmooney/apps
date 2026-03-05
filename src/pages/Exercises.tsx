@@ -79,7 +79,7 @@ export function Exercises() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [activeCategory, setActiveCategory] = useState("All")
-  const [sortBy, setSortBy] = useState<SortOption>("name")
+  const [sortBy, setSortBy] = useState<SortOption>("last_performed")
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
