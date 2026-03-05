@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { useNavigate, useSearchParams, Link } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, parseLocalDate, type TrendSet } from "@/lib/workout-utils"
@@ -355,18 +356,48 @@ export function Exercises() {
   const canGoForward = useCanGoForward()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  const [exercises, setExercises] = useState<Exercise[]>([])
-  const [summaryMap, setSummaryMap] = useState<Map<string, ExerciseSummary>>(new Map())
-  const [trendMap, setTrendMap] = useState<Map<string, ExerciseTrendSession[]>>(new Map())
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  const exerciseData = useQuery({
+    queryKey: ['exercises'],
+    queryFn: async () => {
+      const [exercisesRes, summaryRes, trendRes] = await Promise.all([
+        supabase.from("exercises").select("*").order("name"),
+        supabase.from("exercise_summary").select("*"),
+        supabase.from("exercise_recent_trend").select("*"),
+      ])
+
+      if (exercisesRes.error) throw exercisesRes.error
+
+      const summaryMap = new Map<string, ExerciseSummary>()
+      for (const row of summaryRes.data ?? []) {
+        summaryMap.set(row.exercise_id, row as ExerciseSummary)
+      }
+
+      const trendMap = new Map<string, ExerciseTrendSession[]>()
+      for (const row of trendRes.data ?? []) {
+        const entry = row as ExerciseTrendSession
+        const existing = trendMap.get(entry.exercise_id) ?? []
+        existing.push(entry)
+        trendMap.set(entry.exercise_id, existing)
+      }
+
+      return { exercises: exercisesRes.data, summaryMap, trendMap }
+    },
+  })
+
+  const exercises = exerciseData.data?.exercises ?? []
+  const summaryMap = exerciseData.data?.summaryMap ?? new Map<string, ExerciseSummary>()
+  const trendMap = exerciseData.data?.trendMap ?? new Map<string, ExerciseTrendSession[]>()
+  const loading = exerciseData.isLoading
+  const error = exerciseData.error?.message ?? null
+  const refreshing = exerciseData.isRefetching
+
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
   const [linkedExerciseName, setLinkedExerciseName] = useState<string | null>(
     () => searchParams.get("exercise")
   )
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [refreshing, setRefreshing] = useState(false)
   const [sessionHistoryOpenId, setSessionHistoryOpenId] = useState<string | null>(null)
   const [sessionHistoryCache, setSessionHistoryCache] = useState<Map<string, SessionHistoryEntry[]>>(new Map())
   const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false)
@@ -454,47 +485,6 @@ export function Exercises() {
     setSessionHistoryLoading(false)
     setSessionHistoryOpenId(exerciseId)
   }
-
-  useEffect(() => {
-    async function load() {
-      const [exercisesRes, summaryRes, trendRes] = await Promise.all([
-        supabase.from("exercises").select("*").order("name"),
-        supabase.from("exercise_summary").select("*"),
-        supabase.from("exercise_recent_trend").select("*"),
-      ])
-
-      if (exercisesRes.error) {
-        setError(exercisesRes.error.message)
-      } else {
-        setExercises(exercisesRes.data)
-      }
-
-      if (summaryRes.data) {
-        const map = new Map<string, ExerciseSummary>()
-        for (const row of summaryRes.data) {
-          map.set(row.exercise_id, row as ExerciseSummary)
-        }
-        setSummaryMap(map)
-      }
-
-      if (trendRes.data) {
-        const map = new Map<string, ExerciseTrendSession[]>()
-        for (const row of trendRes.data) {
-          const entry = row as ExerciseTrendSession
-          const existing = map.get(entry.exercise_id) ?? []
-          existing.push(entry)
-          map.set(entry.exercise_id, existing)
-        }
-        setTrendMap(map)
-      }
-
-      setLoading(false)
-      setRefreshing(false)
-      setSessionHistoryCache(new Map())
-      setSessionHistoryOpenId(null)
-    }
-    load()
-  }, [refreshKey])
 
   // Deep-link from Workouts: auto-expand the linked exercise once data loads
   useEffect(() => {
@@ -604,8 +594,9 @@ export function Exercises() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  setRefreshing(true)
-                  setRefreshKey((k) => k + 1)
+                  setSessionHistoryCache(new Map())
+                  setSessionHistoryOpenId(null)
+                  queryClient.invalidateQueries({ queryKey: ['exercises'] })
                 }}
                 className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
               >

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { queryClient } from '@/lib/query-client'
 
 interface AuthState {
   user: User | null
@@ -42,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
+    queryClient.clear()
     await supabase.auth.signOut()
   }
 

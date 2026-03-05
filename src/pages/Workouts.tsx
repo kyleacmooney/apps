@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { formatSet, parseLocalDate, getWeekStartStr, getWeekLabel, type TrendSet } from "@/lib/workout-utils"
 import { ArrowLeft, ArrowRight, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X } from "lucide-react"
@@ -425,10 +426,6 @@ function formatDateStr(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
 }
 
-function monthKey(y: number, m: number): string {
-  return `${y}-${String(m + 1).padStart(2, "0")}`
-}
-
 async function fetchMonth(y: number, m: number): Promise<WorkoutSession[]> {
   const firstDay = formatDateStr(y, m, 1)
   const lastDayNum = new Date(y, m + 1, 0).getDate()
@@ -445,14 +442,13 @@ async function fetchMonth(y: number, m: number): Promise<WorkoutSession[]> {
 }
 
 function CalendarView({
-  refreshKey,
   initialDate,
   onDateSelect,
 }: {
-  refreshKey: number
   initialDate: string | null
   onDateSelect: (date: string | null) => void
 }) {
+  const queryClient = useQueryClient()
   const [currentMonth, setCurrentMonth] = useState(() => {
     if (initialDate) {
       const [y, m] = initialDate.split("-").map(Number)
@@ -461,68 +457,40 @@ function CalendarView({
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
-  const [sessions, setSessions] = useState<WorkoutSession[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(initialDate)
-  const [loading, setLoading] = useState(true)
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
-  const cache = useRef(new Map<string, WorkoutSession[]>())
 
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
 
+  const monthQuery = useQuery({
+    queryKey: ['workouts', 'calendar', year, month],
+    queryFn: () => fetchMonth(year, month),
+  })
+
+  const sessions = monthQuery.data ?? []
+  const loading = monthQuery.isLoading
+
+  // Reset UI state on month change
   const prevMonth = useRef({ year, month })
-  const isMonthChange = prevMonth.current.year !== year || prevMonth.current.month !== month
-
   useEffect(() => {
-    let stale = false
-    const shouldResetUI = isMonthChange
-    prevMonth.current = { year, month }
-
-    async function load() {
-      const key = monthKey(year, month)
-      const isRefresh = refreshKey > 0 && !shouldResetUI
-
-      // On refresh, invalidate the entire cache so we get fresh data
-      if (refreshKey > 0) cache.current.clear()
-
-      const cached = cache.current.get(key)
-
-      if (cached) {
-        setSessions(cached)
-        if (shouldResetUI) {
-          setSelectedDate(null)
-          setExpandedSessionIds(new Set())
-        }
-        setLoading(false)
-      } else {
-        // Only show loading spinner on initial load or month change, not refresh
-        if (!isRefresh) setLoading(true)
-        const data = await fetchMonth(year, month)
-        if (stale) return
-        cache.current.set(key, data)
-        setSessions(data)
-        if (shouldResetUI) {
-          setSelectedDate(null)
-          setExpandedSessionIds(new Set())
-        }
-        setLoading(false)
-      }
-
-      // Prefetch adjacent months in the background
-      for (const offset of [-1, 1]) {
-        const adj = new Date(year, month + offset, 1)
-        const adjKey = monthKey(adj.getFullYear(), adj.getMonth())
-        if (!cache.current.has(adjKey)) {
-          fetchMonth(adj.getFullYear(), adj.getMonth()).then((data) => {
-            cache.current.set(adjKey, data)
-          })
-        }
-      }
+    if (prevMonth.current.year !== year || prevMonth.current.month !== month) {
+      setSelectedDate(null)
+      setExpandedSessionIds(new Set())
+      prevMonth.current = { year, month }
     }
+  }, [year, month])
 
-    load()
-    return () => { stale = true }
-  }, [year, month, refreshKey])
+  // Prefetch adjacent months
+  useEffect(() => {
+    for (const offset of [-1, 1]) {
+      const adj = new Date(year, month + offset, 1)
+      queryClient.prefetchQuery({
+        queryKey: ['workouts', 'calendar', adj.getFullYear(), adj.getMonth()],
+        queryFn: () => fetchMonth(adj.getFullYear(), adj.getMonth()),
+      })
+    }
+  }, [year, month, queryClient])
 
   const sessionsByDate = useMemo(() => {
     const map = new Map<string, WorkoutSession[]>()
@@ -665,21 +633,12 @@ const PAGE_SIZE = 30
 const SESSION_TYPES = ["all", "workout", "mobility", "mixed"] as const
 
 export function Workouts() {
-  const [sessions, setSessions] = useState<WorkoutSession[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const canGoForward = useCanGoForward()
+  const queryClient = useQueryClient()
   const viewMode: ViewMode = searchParams.get("view") === "calendar" ? "calendar" : "list"
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [refreshing, setRefreshing] = useState(false)
-
-  // Pagination
-  const [hasMore, setHasMore] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const pageOffset = useRef(0)
 
   // Session type filter
   const [activeFilter, setActiveFilter] = useState<string>("all")
@@ -688,43 +647,41 @@ export function Workouts() {
   const [linkedSession, setLinkedSession] = useState<WorkoutSession | null>(null)
   const [linkedSessionLoading, setLinkedSessionLoading] = useState(false)
 
-  // Fetch a page of sessions
-  const fetchPage = useCallback(async (offset: number) => {
-    const { data, error } = await supabase
-      .from("workout_sessions")
-      .select(SESSION_SELECT)
-      .order("date", { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1)
+  const sessionsQuery = useInfiniteQuery({
+    queryKey: ['workouts', 'list'],
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await supabase
+        .from("workout_sessions")
+        .select(SESSION_SELECT)
+        .order("date", { ascending: false })
+        .range(pageParam, pageParam + PAGE_SIZE - 1)
 
-    return { data: data ?? [], error }
-  }, [])
+      if (error) throw error
+      return data ?? []
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (lastPage.length < PAGE_SIZE) return undefined
+      return allPages.reduce((sum, page) => sum + page.length, 0)
+    },
+  })
 
-  // Initial load
+  const sessions = useMemo(() => sessionsQuery.data?.pages.flat() ?? [], [sessionsQuery.data])
+  const loading = sessionsQuery.isLoading
+  const error = sessionsQuery.error?.message ?? null
+  const refreshing = sessionsQuery.isRefetching
+  const hasMore = sessionsQuery.hasNextPage ?? false
+  const loadingMore = sessionsQuery.isFetchingNextPage
+
+  // Auto-expand first workout on mount (not on refresh)
+  const hasAutoExpanded = useRef(false)
   useEffect(() => {
-    const isInitialLoad = refreshKey === 0
-
-    async function load() {
-      pageOffset.current = 0
-      const { data, error: fetchError } = await fetchPage(0)
-
-      if (fetchError) {
-        setError(fetchError.message)
-      } else {
-        setSessions(data)
-        setHasMore(data.length >= PAGE_SIZE)
-        pageOffset.current = data.length
-        if (isInitialLoad && !searchParams.get("session")) {
-          const firstWorkout = data.find((s) => s.session_type === "workout")
-          if (firstWorkout) {
-            setExpandedSessionIds(new Set([firstWorkout.id]))
-          }
-        }
-      }
-      setLoading(false)
-      setRefreshing(false)
+    if (!hasAutoExpanded.current && sessions.length > 0 && !searchParams.get("session")) {
+      const firstWorkout = sessions.find((s) => s.session_type === "workout")
+      if (firstWorkout) setExpandedSessionIds(new Set([firstWorkout.id]))
+      hasAutoExpanded.current = true
     }
-    load()
-  }, [refreshKey, fetchPage])
+  }, [sessions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deep-link: read ?session= param on mount
   useEffect(() => {
@@ -747,16 +704,6 @@ export function Workouts() {
       })
 
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Load more handler
-  async function handleLoadMore() {
-    setLoadingMore(true)
-    const { data } = await fetchPage(pageOffset.current)
-    setSessions((prev) => [...prev, ...data])
-    setHasMore(data.length >= PAGE_SIZE)
-    pageOffset.current += data.length
-    setLoadingMore(false)
-  }
 
   // Compute dynamic type list (includes any unexpected types from data)
   const allTypes = useMemo(() => {
@@ -873,8 +820,7 @@ export function Workouts() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  setRefreshing(true)
-                  setRefreshKey((k) => k + 1)
+                  queryClient.invalidateQueries({ queryKey: ['workouts'] })
                 }}
                 className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
               >
@@ -1042,7 +988,7 @@ export function Workouts() {
             {/* Load more */}
             {hasMore && (
               <button
-                onClick={handleLoadMore}
+                onClick={() => sessionsQuery.fetchNextPage()}
                 disabled={loadingMore}
                 className="w-full mt-6 py-3 rounded-xl border border-border-default bg-bg-secondary text-text-muted text-sm font-semibold hover:bg-bg-elevated hover:text-text-secondary transition-all disabled:opacity-50"
               >
@@ -1059,7 +1005,6 @@ export function Workouts() {
           </>
         ) : (
           <CalendarView
-            refreshKey={refreshKey}
             initialDate={searchParams.get("date")}
             onDateSelect={(date) => {
               const params: Record<string, string> = { view: "calendar" }
