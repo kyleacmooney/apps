@@ -3,8 +3,9 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, parseLocalDate, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw } from "lucide-react"
+import { ArrowLeft, ArrowRight, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useCanGoForward } from "@/lib/use-can-go-forward"
 
 interface Exercise {
   id: string
@@ -316,6 +317,7 @@ function ExerciseCard({
 }
 
 export function Exercises() {
+  const canGoForward = useCanGoForward()
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [summaryMap, setSummaryMap] = useState<Map<string, ExerciseSummary>>(new Map())
   const [trendMap, setTrendMap] = useState<Map<string, ExerciseTrendSession[]>>(new Map())
@@ -503,15 +505,25 @@ export function Exercises() {
                 </span>
               </div>
             </div>
-            <button
-              onClick={() => {
-                setRefreshing(true)
-                setRefreshKey((k) => k + 1)
-              }}
-              className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
-            >
-              <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setRefreshing(true)
+                  setRefreshKey((k) => k + 1)
+                }}
+                className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+              </button>
+              {canGoForward && (
+                <button
+                  onClick={() => navigate(1)}
+                  className="text-text-muted hover:text-text-primary transition-colors"
+                >
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </div>
           <p className="text-text-dim text-xs mb-3 ml-8">
             Form cues, progressions & notes

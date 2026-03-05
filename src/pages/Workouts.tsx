@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { formatSet, parseLocalDate, getWeekStartStr, getWeekLabel, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useCanGoForward } from "@/lib/use-can-go-forward"
 
 interface WorkoutSet extends TrendSet {
   id: string
@@ -669,6 +670,8 @@ export function Workouts() {
   const [error, setError] = useState<string | null>(null)
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const canGoForward = useCanGoForward()
   const viewMode: ViewMode = searchParams.get("view") === "calendar" ? "calendar" : "list"
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -848,12 +851,12 @@ export function Workouts() {
         <div className="max-w-2xl mx-auto px-5 pt-4 pb-4">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-3">
-              <Link
-                to="/"
+              <button
+                onClick={() => navigate(-1)}
                 className="text-text-muted hover:text-text-primary transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
-              </Link>
+              </button>
               <div className="flex items-baseline gap-2.5">
                 <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
                   Workout Sessions
@@ -868,15 +871,15 @@ export function Workouts() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setRefreshing(true)
-                setRefreshKey((k) => k + 1)
-              }}
-              className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
-            >
-              <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-            </button>
+              <button
+                onClick={() => {
+                  setRefreshing(true)
+                  setRefreshKey((k) => k + 1)
+                }}
+                className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+              </button>
             <div className="flex rounded-lg border border-border-default overflow-hidden">
               <button
                 onClick={() => setSearchParams({}, { replace: true })}
@@ -900,7 +903,15 @@ export function Workouts() {
               >
                 <Calendar className="w-4 h-4" />
               </button>
-            </div>
+              </div>
+              {canGoForward && (
+                <button
+                  onClick={() => navigate(1)}
+                  className="text-text-muted hover:text-text-primary transition-colors"
+                >
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              )}
             </div>
           </div>
           <p className="text-text-dim text-xs ml-8 mb-0">
