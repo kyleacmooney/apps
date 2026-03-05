@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react"
-import { Link } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, type TrendSet } from "@/lib/workout-utils"
@@ -84,6 +84,8 @@ export function Exercises() {
   const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   useEffect(() => {
     async function load() {
@@ -123,6 +125,23 @@ export function Exercises() {
     }
     load()
   }, [refreshKey])
+
+  // Deep-link from Workouts: read ?exercise= param, search + expand that exercise
+  useEffect(() => {
+    const exerciseParam = searchParams.get("exercise")
+    if (!exerciseParam || exercises.length === 0) return
+
+    setSearch(exerciseParam)
+    setActiveCategory("All")
+
+    const match = exercises.find(
+      (ex) => ex.name.toLowerCase() === exerciseParam.toLowerCase()
+    )
+    if (match) setExpandedId(match.id)
+
+    // Clear param so refresh starts clean, back button returns to workouts
+    setSearchParams({}, { replace: true })
+  }, [exercises])
 
   const filtered = useMemo(() => {
     const base = exercises.filter((ex) => {
@@ -203,12 +222,12 @@ export function Exercises() {
           {/* Back + Title */}
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-3">
-              <Link
-                to="/"
+              <button
+                onClick={() => navigate(-1)}
                 className="text-text-muted hover:text-text-primary transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
-              </Link>
+              </button>
               <div className="flex items-baseline gap-2.5">
                 <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
                   Exercise Encyclopedia

@@ -124,9 +124,13 @@ function ExerciseRow({
         )}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-text-primary text-[13.5px] font-medium truncate">
+          <Link
+            to={`/exercises?exercise=${encodeURIComponent(exercise.exercise_name)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-text-primary text-[13.5px] font-medium truncate hover:text-core transition-colors"
+          >
             {exercise.exercise_name}
-          </span>
+          </Link>
           {hasPR && <Trophy className="w-3 h-3 text-core shrink-0" />}
         </div>
         {isExpandable && (
