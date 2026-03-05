@@ -262,7 +262,7 @@ function SessionCard({
               <h3 className="text-text-primary font-semibold text-[15px] m-0">
                 {session.title ?? session.session_type}
               </h3>
-              <div className={cn("flex items-center gap-3 mt-1 flex-wrap", isNonWorkout && !isSessionExpanded && "hidden")}>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <div className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-text-dim" />
                   <span className="text-text-muted text-xs font-mono">
@@ -283,7 +283,7 @@ function SessionCard({
                   </div>
                 )}
                 {session.location && (
-                  <div className="flex items-center gap-1">
+                  <div className={cn("flex items-center gap-1", isNonWorkout && !isSessionExpanded && "hidden")}>
                     <MapPin className="w-3 h-3 text-text-dim" />
                     <span className="text-text-muted text-xs font-mono">
                       {session.location}
