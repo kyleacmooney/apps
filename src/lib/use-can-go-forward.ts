@@ -11,11 +11,11 @@ export function useCanGoForward() {
   useEffect(() => {
     const idx = window.history.state?.idx ?? 0
 
-    if (navigationType !== "POP") {
-      // PUSH or REPLACE — this is the new tip, no forward history
+    if (navigationType === "PUSH") {
+      // PUSH — this is the new tip, no forward history
       maxHistoryIdx = idx
     } else {
-      // POP (back or forward) — update max if we moved forward past it
+      // POP or REPLACE — forward entries may still exist
       maxHistoryIdx = Math.max(maxHistoryIdx, idx)
     }
 

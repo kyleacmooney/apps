@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { formatSet, parseLocalDate, getWeekStartStr, getWeekLabel, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, ArrowRight, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X, Home } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 
@@ -799,22 +799,33 @@ export function Workouts() {
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-3">
               <button
+                onClick={() => navigate("/")}
+                className="text-text-muted hover:text-text-primary transition-colors"
+              >
+                <Home className="w-4 h-4" />
+              </button>
+              <button
                 onClick={() => navigate(-1)}
                 className="text-text-muted hover:text-text-primary transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <div className="flex items-baseline gap-2.5">
-                <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                  Workout Sessions
-                </h1>
-                {viewMode === "list" && (
-                  <span className="text-text-dim text-xs font-mono font-medium">
-                    {activeFilter === "all"
-                      ? sessions.length
-                      : `${filteredCount} / ${sessions.length}`}
-                  </span>
-                )}
+              <div>
+                <div className="flex items-baseline gap-2.5">
+                  <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+                    Workout Sessions
+                  </h1>
+                  {viewMode === "list" && (
+                    <span className="text-text-dim text-xs font-mono font-medium">
+                      {activeFilter === "all"
+                        ? sessions.length
+                        : `${filteredCount} / ${sessions.length}`}
+                    </span>
+                  )}
+                </div>
+                <p className="text-text-dim text-xs m-0">
+                  {viewMode === "list" ? "Recent training history" : "Monthly overview"}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -860,9 +871,6 @@ export function Workouts() {
               )}
             </div>
           </div>
-          <p className="text-text-dim text-xs ml-8 mb-0">
-            {viewMode === "list" ? "Recent training history" : "Monthly overview"}
-          </p>
 
           {/* Session type filter pills — list view only */}
           {viewMode === "list" && (

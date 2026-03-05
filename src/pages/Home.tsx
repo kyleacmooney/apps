@@ -1,16 +1,19 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
-import { Dumbbell, BookOpen, LogIn, LogOut } from "lucide-react"
+import { useCanGoForward } from "@/lib/use-can-go-forward"
+import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight } from "lucide-react"
 
 export function Home() {
   const { user, signIn, signOut } = useAuth()
+  const navigate = useNavigate()
+  const canGoForward = useCanGoForward()
 
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col">
       {/* Auth bar */}
-      <div className="flex justify-end p-4">
+      <div className="flex items-center justify-end gap-3 p-4">
         {user ? (
-          <div className="flex items-center gap-3">
+          <>
             <span className="text-text-muted text-sm font-mono truncate max-w-48">
               {user.email}
             </span>
@@ -21,7 +24,7 @@ export function Home() {
               <LogOut className="w-4 h-4" />
               Sign out
             </button>
-          </div>
+          </>
         ) : (
           <button
             onClick={signIn}
@@ -29,6 +32,14 @@ export function Home() {
           >
             <LogIn className="w-4 h-4" />
             Sign in with Google
+          </button>
+        )}
+        {canGoForward && (
+          <button
+            onClick={() => navigate(1)}
+            className="text-text-muted hover:text-text-primary transition-colors"
+          >
+            <ArrowRight className="w-5 h-5" />
           </button>
         )}
       </div>

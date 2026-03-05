@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, parseLocalDate, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, ArrowRight, Search, ChevronDown, ChevronRight, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw } from "lucide-react"
+import { ArrowLeft, ArrowRight, Search, ChevronDown, ChevronRight, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw, Home } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 
@@ -577,18 +577,29 @@ export function Exercises() {
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-3">
               <button
+                onClick={() => navigate("/")}
+                className="text-text-muted hover:text-text-primary transition-colors"
+              >
+                <Home className="w-4 h-4" />
+              </button>
+              <button
                 onClick={() => navigate(-1)}
                 className="text-text-muted hover:text-text-primary transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <div className="flex items-baseline gap-2.5">
-                <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                  Exercise Encyclopedia
-                </h1>
-                <span className="text-text-dim text-xs font-mono font-medium">
-                  {exercises.length}
-                </span>
+              <div>
+                <div className="flex items-baseline gap-2.5">
+                  <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+                    Exercise Encyclopedia
+                  </h1>
+                  <span className="text-text-dim text-xs font-mono font-medium">
+                    {exercises.length}
+                  </span>
+                </div>
+                <p className="text-text-dim text-xs m-0">
+                  Form cues, progressions & notes
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -612,9 +623,7 @@ export function Exercises() {
               )}
             </div>
           </div>
-          <p className="text-text-dim text-xs mb-3 ml-8">
-            Form cues, progressions & notes
-          </p>
+          <div className="h-3" />
 
           {/* Search */}
           <div className="relative mb-3">
