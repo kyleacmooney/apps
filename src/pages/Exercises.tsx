@@ -454,7 +454,7 @@ export function Exercises() {
                                   <span className="text-text-dim w-4 text-right shrink-0">
                                     {set.set_number})
                                   </span>
-                                  <span className="text-text-secondary">
+                                  <span className="text-text-secondary whitespace-nowrap shrink-0">
                                     {formatSet(set)}
                                   </span>
                                   {set.is_pr && (
