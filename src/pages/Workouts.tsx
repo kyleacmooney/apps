@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { formatSet, type TrendSet } from "@/lib/workout-utils"
 import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown } from "lucide-react"
@@ -444,13 +444,25 @@ async function fetchMonth(y: number, m: number): Promise<WorkoutSession[]> {
   return data ?? []
 }
 
-function CalendarView({ refreshKey }: { refreshKey: number }) {
+function CalendarView({
+  refreshKey,
+  initialDate,
+  onDateSelect,
+}: {
+  refreshKey: number
+  initialDate: string | null
+  onDateSelect: (date: string | null) => void
+}) {
   const [currentMonth, setCurrentMonth] = useState(() => {
+    if (initialDate) {
+      const [y, m] = initialDate.split("-").map(Number)
+      return new Date(y, m - 1, 1)
+    }
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
   const [sessions, setSessions] = useState<WorkoutSession[]>([])
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate)
   const [loading, setLoading] = useState(true)
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
   const cache = useRef(new Map<string, WorkoutSession[]>())
@@ -578,7 +590,11 @@ function CalendarView({ refreshKey }: { refreshKey: number }) {
           return (
             <button
               key={i}
-              onClick={() => setSelectedDate(isSelected ? null : dateStr)}
+              onClick={() => {
+                const newDate = isSelected ? null : dateStr
+                setSelectedDate(newDate)
+                onDateSelect(newDate)
+              }}
               className={cn(
                 "aspect-square rounded-lg flex flex-col items-center justify-center gap-1 text-sm transition-all",
                 isSelected
@@ -650,7 +666,8 @@ export function Workouts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
-  const [viewMode, setViewMode] = useState<ViewMode>("list")
+  const [searchParams, setSearchParams] = useSearchParams()
+  const viewMode: ViewMode = searchParams.get("view") === "calendar" ? "calendar" : "list"
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -743,7 +760,7 @@ export function Workouts() {
             </button>
             <div className="flex rounded-lg border border-border-default overflow-hidden">
               <button
-                onClick={() => setViewMode("list")}
+                onClick={() => setSearchParams({}, { replace: true })}
                 className={cn(
                   "p-1.5 transition-colors",
                   viewMode === "list"
@@ -754,7 +771,7 @@ export function Workouts() {
                 <List className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setViewMode("calendar")}
+                onClick={() => setSearchParams({ view: "calendar" }, { replace: true })}
                 className={cn(
                   "p-1.5 transition-colors",
                   viewMode === "calendar"
@@ -803,7 +820,15 @@ export function Workouts() {
             </div>
           )
         ) : (
-          <CalendarView refreshKey={refreshKey} />
+          <CalendarView
+            refreshKey={refreshKey}
+            initialDate={searchParams.get("date")}
+            onDateSelect={(date) => {
+              const params: Record<string, string> = { view: "calendar" }
+              if (date) params.date = date
+              setSearchParams(params, { replace: true })
+            }}
+          />
         )}
       </div>
     </div>

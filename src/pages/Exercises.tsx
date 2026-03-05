@@ -77,15 +77,28 @@ export function Exercises() {
   const [trendMap, setTrendMap] = useState<Map<string, ExerciseTrendSession[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState("")
-  const [activeCategory, setActiveCategory] = useState("All")
-  const [sortBy, setSortBy] = useState<SortOption>("last_performed")
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+
+  // Derive filter/sort state from URL params
+  const search = searchParams.get("q") || ""
+  const activeCategory = searchParams.get("cat") || "All"
+  const sortBy = (searchParams.get("sort") as SortOption) || "last_performed"
+
+  const PARAM_DEFAULTS: Record<string, string> = { q: "", cat: "All", sort: "last_performed" }
+
+  function updateParams(updates: Record<string, string | null>) {
+    const next = new URLSearchParams(searchParams)
+    for (const [k, v] of Object.entries(updates)) {
+      if (v && v !== PARAM_DEFAULTS[k]) next.set(k, v)
+      else next.delete(k)
+    }
+    setSearchParams(next, { replace: true })
+  }
 
   useEffect(() => {
     async function load() {
@@ -131,16 +144,13 @@ export function Exercises() {
     const exerciseParam = searchParams.get("exercise")
     if (!exerciseParam || exercises.length === 0) return
 
-    setSearch(exerciseParam)
-    setActiveCategory("All")
-
     const match = exercises.find(
       (ex) => ex.name.toLowerCase() === exerciseParam.toLowerCase()
     )
     if (match) setExpandedId(match.id)
 
-    // Clear param so refresh starts clean, back button returns to workouts
-    setSearchParams({}, { replace: true })
+    // Replace exercise param with q/cat params, clearing the deep-link
+    setSearchParams({ q: exerciseParam, cat: "All" }, { replace: true })
   }, [exercises])
 
   const filtered = useMemo(() => {
@@ -258,12 +268,12 @@ export function Exercises() {
               type="text"
               placeholder="Search exercises, cues, notes..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => updateParams({ q: e.target.value || null })}
               className="w-full py-2.5 pl-9 pr-9 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-base font-sans placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
             />
             {search && (
               <button
-                onClick={() => setSearch("")}
+                onClick={() => updateParams({ q: null })}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-text-dim hover:text-text-muted transition-colors cursor-pointer bg-transparent border-none p-0"
               >
                 <X className="w-4 h-4" />
@@ -285,7 +295,7 @@ export function Exercises() {
               return (
                 <button
                   key={cat}
-                  onClick={() => setActiveCategory(cat)}
+                  onClick={() => updateParams({ cat })}
                   className={cn(
                     "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer whitespace-nowrap",
                     isActive && style
@@ -310,7 +320,7 @@ export function Exercises() {
             {SORT_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setSortBy(opt.value)}
+                onClick={() => updateParams({ sort: opt.value })}
                 className={cn(
                   "px-2.5 py-1 rounded-md text-[11px] font-semibold font-mono transition-all cursor-pointer",
                   sortBy === opt.value
