@@ -591,7 +591,7 @@ function CalendarView({ refreshKey }: { refreshKey: number }) {
                 day: "numeric",
               })}
             </span>
-            {selectedSessions.length === 0 && (
+            {selectedSessions.length === 0 && selectedDate <= new Date().toISOString().split("T")[0] && (
               <span className="text-text-dim text-xs font-mono">— rest day</span>
             )}
           </div>
