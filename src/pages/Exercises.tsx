@@ -61,8 +61,8 @@ const DETAIL_SECTIONS = [
 type SortOption = "name" | "last_performed" | "total_sessions"
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "name", label: "A-Z" },
   { value: "last_performed", label: "Recent" },
+  { value: "name", label: "A-Z" },
   { value: "total_sessions", label: "Most Used" },
 ]
 
