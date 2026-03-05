@@ -1,9 +1,9 @@
-import { useEffect, useState, useMemo } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useEffect, useState, useMemo, useCallback, useRef } from "react"
+import { useNavigate, useSearchParams, Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, parseLocalDate, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, ArrowRight, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw } from "lucide-react"
+import { ArrowLeft, ArrowRight, Search, ChevronDown, ChevronRight, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 
@@ -51,6 +51,13 @@ interface ExerciseTrendSession {
   sets: TrendSet[]
 }
 
+interface SessionHistoryEntry {
+  id: string
+  date: string
+  title: string | null
+  session_type: string
+}
+
 const DETAIL_SECTIONS = [
   { key: "form_cues" as const, label: "Form Cues", icon: Target },
   { key: "common_mistakes" as const, label: "Common Mistakes", icon: AlertTriangle },
@@ -77,6 +84,8 @@ function ExerciseCard({
   walkthroughExpandedId,
   onToggleWalkthrough,
   isHighlighted = false,
+  sessionHistoryLoading = false,
+  onToggleSessionHistory,
 }: {
   exercise: Exercise
   isExpanded: boolean
@@ -86,6 +95,8 @@ function ExerciseCard({
   walkthroughExpandedId: string | null
   onToggleWalkthrough: (id: string | null) => void
   isHighlighted?: boolean
+  sessionHistoryLoading?: boolean
+  onToggleSessionHistory: (exerciseId: string) => void
 }) {
   const style = getCategoryStyle(exercise.category)
   const sections = DETAIL_SECTIONS.filter((s) => exercise[s.key])
@@ -133,7 +144,30 @@ function ExerciseCard({
         {/* Stats row — only when exercise has been performed */}
         {hasBeenPerformed && (
           <div className="flex items-center gap-1.5 mt-1.5 ml-[calc(0.625rem+theme(spacing.2.5))] text-text-dim text-[11px] font-mono flex-wrap">
-            <span>{summary.total_sessions} {summary.total_sessions === 1 ? "session" : "sessions"}</span>
+            {isExpanded ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleSessionHistory(exercise.id)
+                }}
+                disabled={sessionHistoryLoading}
+                className={cn(
+                  "bg-transparent border-none p-0 cursor-pointer font-mono text-[11px] underline decoration-dotted underline-offset-2 transition-colors text-text-dim hover:text-text-secondary",
+                  sessionHistoryLoading && "opacity-60 cursor-wait"
+                )}
+              >
+                {sessionHistoryLoading ? (
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-2.5 h-2.5 border border-text-dim border-t-text-muted rounded-full animate-spin" />
+                    Loading...
+                  </span>
+                ) : (
+                  <>{summary.total_sessions} {summary.total_sessions === 1 ? "session" : "sessions"}</>
+                )}
+              </button>
+            ) : (
+              <span>{summary.total_sessions} {summary.total_sessions === 1 ? "session" : "sessions"}</span>
+            )}
             {summary.last_performed && (
               <>
                 <span className="opacity-40">·</span>
@@ -169,6 +203,7 @@ function ExerciseCard({
             )}
           </div>
         )}
+
       </div>
 
       {/* Expanded content */}
@@ -328,8 +363,29 @@ export function Exercises() {
   const [linkedExerciseName, setLinkedExerciseName] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
+  const [sessionHistoryOpenId, setSessionHistoryOpenId] = useState<string | null>(null)
+  const [sessionHistoryCache, setSessionHistoryCache] = useState<Map<string, SessionHistoryEntry[]>>(new Map())
+  const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false)
+  // Sheet animation: mount first, then animate in; animate out, then unmount
+  const [sheetMountedId, setSheetMountedId] = useState<string | null>(null)
+  const [sheetVisible, setSheetVisible] = useState(false)
+  const sheetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+
+  // Sheet open: mount DOM, then trigger transition on next frame
+  useEffect(() => {
+    clearTimeout(sheetTimerRef.current)
+    if (sessionHistoryOpenId) {
+      setSheetMountedId(sessionHistoryOpenId)
+      requestAnimationFrame(() => requestAnimationFrame(() => setSheetVisible(true)))
+    } else {
+      setSheetVisible(false)
+      sheetTimerRef.current = setTimeout(() => setSheetMountedId(null), 300)
+    }
+  }, [sessionHistoryOpenId])
+
+  const closeSheet = useCallback(() => setSessionHistoryOpenId(null), [])
 
   // Derive filter/sort state from URL params
   const search = searchParams.get("q") || ""
@@ -351,10 +407,50 @@ export function Exercises() {
       if (v && v !== PARAM_DEFAULTS[k]) next.set(k, v)
       else next.delete(k)
     }
-    // Clear deep-link when user interacts with search/filter/sort
+    // Clear deep-link and session history when user interacts with search/filter/sort
     next.delete("exercise")
     setLinkedExerciseName(null)
+    setSessionHistoryOpenId(null)
     setSearchParams(next, { replace: true })
+  }
+
+  async function toggleSessionHistory(exerciseId: string) {
+    if (sessionHistoryOpenId === exerciseId) {
+      setSessionHistoryOpenId(null)
+      return
+    }
+
+    // If cached, open immediately
+    if (sessionHistoryCache.has(exerciseId)) {
+      setSessionHistoryOpenId(exerciseId)
+      return
+    }
+
+    // Fetch first, then open sheet with data ready
+    setSessionHistoryLoading(true)
+    const { data: exerciseRows } = await supabase
+      .from("workout_exercises")
+      .select("session_id")
+      .eq("exercise_id", exerciseId)
+
+    const sessionIds = [...new Set(exerciseRows?.map((r) => r.session_id) ?? [])]
+    let sessions: SessionHistoryEntry[] = []
+    if (sessionIds.length > 0) {
+      const { data } = await supabase
+        .from("workout_sessions")
+        .select("id, date, title, session_type")
+        .in("id", sessionIds)
+        .order("date", { ascending: false })
+      sessions = (data as SessionHistoryEntry[]) ?? []
+    }
+
+    setSessionHistoryCache((prev) => {
+      const next = new Map(prev)
+      next.set(exerciseId, sessions)
+      return next
+    })
+    setSessionHistoryLoading(false)
+    setSessionHistoryOpenId(exerciseId)
   }
 
   useEffect(() => {
@@ -392,6 +488,8 @@ export function Exercises() {
 
       setLoading(false)
       setRefreshing(false)
+      setSessionHistoryCache(new Map())
+      setSessionHistoryOpenId(null)
     }
     load()
   }, [refreshKey])
@@ -637,6 +735,8 @@ export function Exercises() {
               walkthroughExpandedId={walkthroughExpandedId}
               onToggleWalkthrough={setWalkthroughExpandedId}
               isHighlighted
+              sessionHistoryLoading={sessionHistoryLoading}
+              onToggleSessionHistory={toggleSessionHistory}
             />
           </div>
         )}
@@ -663,11 +763,107 @@ export function Exercises() {
                 trendSessions={trendMap.get(ex.id)}
                 walkthroughExpandedId={walkthroughExpandedId}
                 onToggleWalkthrough={setWalkthroughExpandedId}
+                sessionHistoryLoading={sessionHistoryLoading}
+                onToggleSessionHistory={toggleSessionHistory}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Session history bottom sheet */}
+      {sheetMountedId && (() => {
+        const sheetExercise = exercises.find((ex) => ex.id === sheetMountedId)
+        const sheetSessions = sessionHistoryCache.get(sheetMountedId) ?? []
+        const sheetStyle = sheetExercise ? getCategoryStyle(sheetExercise.category) : null
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            {/* Backdrop */}
+            <div
+              className={cn(
+                "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300",
+                sheetVisible ? "opacity-100" : "opacity-0"
+              )}
+              onClick={closeSheet}
+            />
+            {/* Sheet */}
+            <div
+              className={cn(
+                "relative w-full max-w-lg bg-bg-secondary rounded-t-2xl border-t border-x border-border-default max-h-[70vh] flex flex-col transition-transform duration-300 ease-out",
+                sheetVisible ? "translate-y-0" : "translate-y-full"
+              )}
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-2">
+                <div className="w-10 h-1 rounded-full bg-text-dim/30" />
+              </div>
+              {/* Header */}
+              <div className="px-5 pb-3 border-b border-border-default">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {sheetExercise && sheetStyle && (
+                      <span className={cn("shrink-0 text-[10px] font-semibold font-mono uppercase tracking-wide px-2 py-0.5 rounded-md", sheetStyle.tag)}>
+                        {sheetExercise.category}
+                      </span>
+                    )}
+                    <h2 className="text-base font-semibold text-text-primary m-0 truncate">
+                      {sheetExercise?.name ?? "Sessions"}
+                    </h2>
+                  </div>
+                  <button
+                    onClick={closeSheet}
+                    className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-text-dim text-[11px] font-mono mt-1">
+                  {sheetSessions.length} workout {sheetSessions.length === 1 ? "session" : "sessions"}
+                </p>
+              </div>
+              {/* Session list */}
+              <div className="overflow-y-auto flex-1 overscroll-contain">
+                {sheetSessions.length > 0 ? (
+                  <div className="flex flex-col">
+                    {sheetSessions.map((s, i) => (
+                      <Link
+                        key={s.id}
+                        to={`/workouts?session=${s.id}`}
+                        onClick={closeSheet}
+                        className={cn(
+                          "flex items-center justify-between gap-3 px-5 py-3.5 transition-colors group no-underline",
+                          "hover:bg-bg-elevated/50 active:bg-bg-elevated/70",
+                          i < sheetSessions.length - 1 && "border-b border-border-default"
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-text-dim text-[11px] font-mono whitespace-nowrap w-14 shrink-0">
+                            {relativeDate(s.date)}
+                          </span>
+                          <div className="min-w-0">
+                            <span className="text-text-primary text-[13px] font-medium block truncate">
+                              {s.title ?? s.session_type}
+                            </span>
+                            <span className="text-text-dim text-[11px] font-mono">
+                              {parseLocalDate(s.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-dim group-hover:text-text-muted shrink-0 transition-colors" />
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-text-dim text-sm">
+                    No sessions found
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
