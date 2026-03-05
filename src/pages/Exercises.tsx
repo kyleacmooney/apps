@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X } from "lucide-react"
+import { ArrowLeft, Search, ChevronDown, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Exercise {
@@ -77,6 +77,8 @@ export function Exercises() {
   const [sortBy, setSortBy] = useState<SortOption>("name")
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -112,9 +114,10 @@ export function Exercises() {
       }
 
       setLoading(false)
+      setRefreshing(false)
     }
     load()
-  }, [])
+  }, [refreshKey])
 
   const filtered = useMemo(() => {
     const base = exercises.filter((ex) => {
@@ -193,21 +196,32 @@ export function Exercises() {
       <div className="sticky top-0 z-10 border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
         <div className="max-w-2xl mx-auto px-5 pt-4 pb-4">
           {/* Back + Title */}
-          <div className="flex items-center gap-3 mb-1">
-            <Link
-              to="/"
-              className="text-text-muted hover:text-text-primary transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="flex items-baseline gap-2.5">
-              <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                Exercise Encyclopedia
-              </h1>
-              <span className="text-text-dim text-xs font-mono font-medium">
-                {exercises.length}
-              </span>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-3">
+              <Link
+                to="/"
+                className="text-text-muted hover:text-text-primary transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div className="flex items-baseline gap-2.5">
+                <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+                  Exercise Encyclopedia
+                </h1>
+                <span className="text-text-dim text-xs font-mono font-medium">
+                  {exercises.length}
+                </span>
+              </div>
             </div>
+            <button
+              onClick={() => {
+                setRefreshing(true)
+                setRefreshKey((k) => k + 1)
+              }}
+              className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+            </button>
           </div>
           <p className="text-text-dim text-xs mb-3 ml-8">
             Form cues, progressions & notes
