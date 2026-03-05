@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { formatSet, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw } from "lucide-react"
+import { ArrowLeft, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface WorkoutSet extends TrendSet {
@@ -195,7 +195,7 @@ function SessionCard({
   isSessionExpanded: boolean
   onToggleSession: () => void
 }) {
-  const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null)
+  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<string>>(new Set())
   const [highlighted, setHighlighted] = useState(false)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const exercises = session.workout_exercises
@@ -356,6 +356,26 @@ function SessionCard({
           {/* Exercise sections */}
           {sections.length > 0 && (
             <div className="mt-4 ml-6 flex flex-col gap-3">
+              {/* Expand/Collapse all toggle */}
+              {(() => {
+                const expandableIds = exercises.filter((e) => e.workout_sets.length > 0).map((e) => e.id)
+                const allExpanded = expandableIds.length > 0 && expandableIds.every((id) => expandedExerciseIds.has(id))
+                return expandableIds.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setExpandedExerciseIds(allExpanded ? new Set() : new Set(expandableIds))
+                    }}
+                    className="flex items-center gap-1.5 text-text-dim hover:text-text-muted text-[11px] font-mono transition-colors self-end"
+                  >
+                    {allExpanded ? (
+                      <><ChevronsDownUp className="w-3 h-3" /> Collapse all</>
+                    ) : (
+                      <><ChevronsUpDown className="w-3 h-3" /> Expand all</>
+                    )}
+                  </button>
+                )
+              })()}
               {sections.map((section) => (
                 <div key={section.key}>
                   <div className="flex items-center gap-2 mb-1">
@@ -369,11 +389,14 @@ function SessionCard({
                       <ExerciseRow
                         key={ex.id}
                         exercise={ex}
-                        isExpanded={expandedExerciseId === ex.id}
+                        isExpanded={expandedExerciseIds.has(ex.id)}
                         onToggle={() =>
-                          setExpandedExerciseId(
-                            expandedExerciseId === ex.id ? null : ex.id
-                          )
+                          setExpandedExerciseIds((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(ex.id)) next.delete(ex.id)
+                            else next.add(ex.id)
+                            return next
+                          })
                         }
                       />
                     ))}
