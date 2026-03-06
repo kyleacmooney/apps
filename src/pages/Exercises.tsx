@@ -646,7 +646,7 @@ export function Exercises() {
           </div>
 
           {/* Category filters */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-5 px-5 scrollbar-none">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-5 px-5 scrollbar-none select-none">
             {CATEGORIES.map((cat) => {
               const isActive = activeCategory === cat
               const count =
@@ -679,7 +679,7 @@ export function Exercises() {
           </div>
 
           {/* Sort options */}
-          <div className="flex items-center gap-2 mt-2.5">
+          <div className="flex items-center gap-2 mt-2.5 select-none">
             <span className="text-text-dim text-[11px] font-mono">Sort:</span>
             {SORT_OPTIONS.map((opt) => (
               <button
