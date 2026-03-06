@@ -424,8 +424,12 @@ export function Exercises() {
   const search = searchParams.get("q") || ""
   const activeCategory = searchParams.get("cat") || "All"
   const sortBy = (searchParams.get("sort") as SortOption) || "last_performed"
+  const excludedCategories = useMemo(() => {
+    const raw = searchParams.get("exclude") || ""
+    return raw ? new Set(raw.split(",")) : new Set<string>()
+  }, [searchParams])
 
-  const PARAM_DEFAULTS: Record<string, string> = { q: "", cat: "All", sort: "last_performed" }
+  const PARAM_DEFAULTS: Record<string, string> = { q: "", cat: "All", sort: "last_performed", exclude: "" }
 
   const linkedExercise = useMemo(() => {
     if (!linkedExerciseName) return null
@@ -500,7 +504,9 @@ export function Exercises() {
       // Exclude linked exercise from normal list to avoid duplication
       if (linkedExercise && ex.id === linkedExercise.id) return false
       const matchesCategory =
-        activeCategory === "All" || ex.category === activeCategory
+        activeCategory === "All"
+          ? !excludedCategories.has(ex.category)
+          : ex.category === activeCategory
       const q = search.toLowerCase()
       const matchesSearch =
         !q ||
@@ -529,7 +535,7 @@ export function Exercises() {
       if (aCount === bCount) return a.name.localeCompare(b.name)
       return bCount - aCount
     })
-  }, [exercises, activeCategory, search, sortBy, summaryMap, linkedExercise])
+  }, [exercises, activeCategory, search, sortBy, summaryMap, linkedExercise, excludedCategories])
 
   const categoryCounts = useMemo(() => {
     return exercises.reduce<Record<string, number>>((acc, ex) => {
@@ -649,9 +655,10 @@ export function Exercises() {
           <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-5 px-5 scrollbar-none">
             {CATEGORIES.map((cat) => {
               const isActive = activeCategory === cat
+              const isExcluded = cat !== "All" && excludedCategories.has(cat)
               const count =
                 cat === "All"
-                  ? exercises.length
+                  ? exercises.length - exercises.filter((ex) => excludedCategories.has(ex.category)).length
                   : categoryCounts[cat] || 0
               const style =
                 cat !== "All" ? getCategoryStyle(cat) : null
@@ -659,16 +666,34 @@ export function Exercises() {
               return (
                 <button
                   key={cat}
-                  onClick={() => updateParams({ cat })}
+                  onClick={() => {
+                    if (cat === "All") {
+                      // Reset: clear exclusions and set to All
+                      updateParams({ cat: "All", exclude: null })
+                    } else if (activeCategory === "All") {
+                      // Toggle exclusion for this category
+                      const next = new Set(excludedCategories)
+                      if (next.has(cat)) next.delete(cat)
+                      else next.add(cat)
+                      const excludeStr = [...next].join(",") || null
+                      updateParams({ exclude: excludeStr })
+                    } else {
+                      // Include mode: select this category
+                      updateParams({ cat, exclude: null })
+                    }
+                  }}
                   className={cn(
                     "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer whitespace-nowrap",
-                    isActive && style
-                      ? `${style.border} ${style.bg} ${style.text}`
-                      : isActive
-                        ? "border-text-muted/40 bg-text-muted/10 text-text-secondary"
-                        : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+                    isExcluded
+                      ? "border-border-default bg-transparent text-text-dim line-through opacity-50"
+                      : isActive && style
+                        ? `${style.border} ${style.bg} ${style.text}`
+                        : isActive
+                          ? "border-text-muted/40 bg-text-muted/10 text-text-secondary"
+                          : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
                   )}
                 >
+                  {isExcluded && <X className="w-3 h-3 inline mr-0.5 -ml-0.5" />}
                   {cat}
                   <span className="ml-1.5 opacity-60 font-mono text-[11px]">
                     {count}
@@ -742,8 +767,12 @@ export function Exercises() {
         {filtered.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-text-dim text-sm">
-              No exercises match "{search}" in{" "}
-              {activeCategory === "All" ? "any category" : activeCategory}.
+              No exercises match{search ? ` "${search}" in` : ""}{" "}
+              {activeCategory === "All"
+                ? excludedCategories.size > 0
+                  ? "the selected categories"
+                  : "any category"
+                : activeCategory}.
             </p>
           </div>
         ) : (
