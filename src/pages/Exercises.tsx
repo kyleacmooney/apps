@@ -420,6 +420,14 @@ export function Exercises() {
 
   const closeSheet = useCallback(() => setSessionHistoryOpenId(null), [])
 
+  // Disable background scrolling while the sheet is open
+  useEffect(() => {
+    if (sheetMountedId) {
+      document.body.style.overflow = "hidden"
+      return () => { document.body.style.overflow = "" }
+    }
+  }, [sheetMountedId])
+
   // Derive filter/sort state from URL params
   const search = searchParams.get("q") || ""
   const activeCategory = searchParams.get("cat") || "All"
