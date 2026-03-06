@@ -352,6 +352,85 @@ function ExerciseCard({
   )
 }
 
+const LONG_PRESS_MS = 500
+
+function CategoryFilterRow({
+  categories,
+  activeCategory,
+  excludedCategories,
+  exercises,
+  categoryCounts,
+  onSelect,
+  onLongPress,
+}: {
+  categories: readonly string[]
+  activeCategory: string
+  excludedCategories: Set<string>
+  exercises: Exercise[]
+  categoryCounts: Record<string, number>
+  onSelect: (cat: string) => void
+  onLongPress: (cat: string) => void
+}) {
+  const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const didLongPress = useRef(false)
+
+  function handlePointerDown(cat: string) {
+    didLongPress.current = false
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true
+      onLongPress(cat)
+    }, LONG_PRESS_MS)
+  }
+
+  function handlePointerUp() {
+    clearTimeout(longPressTimer.current)
+  }
+
+  return (
+    <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-5 px-5 scrollbar-none">
+      {categories.map((cat) => {
+        const isActive = activeCategory === cat
+        const isExcluded = cat !== "All" && excludedCategories.has(cat)
+        const count =
+          cat === "All"
+            ? exercises.length - exercises.filter((ex) => excludedCategories.has(ex.category)).length
+            : categoryCounts[cat] || 0
+        const style = cat !== "All" ? getCategoryStyle(cat) : null
+
+        return (
+          <button
+            key={cat}
+            onClick={() => {
+              if (didLongPress.current) return
+              onSelect(cat)
+            }}
+            onPointerDown={() => handlePointerDown(cat)}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onContextMenu={(e) => e.preventDefault()}
+            className={cn(
+              "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer whitespace-nowrap select-none touch-manipulation",
+              isExcluded
+                ? "border-border-default bg-transparent text-text-dim line-through opacity-50"
+                : isActive && style
+                  ? `${style.border} ${style.bg} ${style.text}`
+                  : isActive
+                    ? "border-text-muted/40 bg-text-muted/10 text-text-secondary"
+                    : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+            )}
+          >
+            {isExcluded && <X className="w-3 h-3 inline mr-0.5 -ml-0.5" />}
+            {cat}
+            <span className="ml-1.5 opacity-60 font-mono text-[11px]">
+              {count}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function Exercises() {
   const canGoForward = useCanGoForward()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -651,57 +730,36 @@ export function Exercises() {
             )}
           </div>
 
-          {/* Category filters */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-5 px-5 scrollbar-none">
-            {CATEGORIES.map((cat) => {
-              const isActive = activeCategory === cat
-              const isExcluded = cat !== "All" && excludedCategories.has(cat)
-              const count =
-                cat === "All"
-                  ? exercises.length - exercises.filter((ex) => excludedCategories.has(ex.category)).length
-                  : categoryCounts[cat] || 0
-              const style =
-                cat !== "All" ? getCategoryStyle(cat) : null
-
-              return (
-                <button
-                  key={cat}
-                  onClick={() => {
-                    if (cat === "All") {
-                      // Reset: clear exclusions and set to All
-                      updateParams({ cat: "All", exclude: null })
-                    } else if (activeCategory === "All") {
-                      // Toggle exclusion for this category
-                      const next = new Set(excludedCategories)
-                      if (next.has(cat)) next.delete(cat)
-                      else next.add(cat)
-                      const excludeStr = [...next].join(",") || null
-                      updateParams({ exclude: excludeStr })
-                    } else {
-                      // Include mode: select this category
-                      updateParams({ cat, exclude: null })
-                    }
-                  }}
-                  className={cn(
-                    "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer whitespace-nowrap",
-                    isExcluded
-                      ? "border-border-default bg-transparent text-text-dim line-through opacity-50"
-                      : isActive && style
-                        ? `${style.border} ${style.bg} ${style.text}`
-                        : isActive
-                          ? "border-text-muted/40 bg-text-muted/10 text-text-secondary"
-                          : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-                  )}
-                >
-                  {isExcluded && <X className="w-3 h-3 inline mr-0.5 -ml-0.5" />}
-                  {cat}
-                  <span className="ml-1.5 opacity-60 font-mono text-[11px]">
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+          {/* Category filters — tap to select, long-press to exclude */}
+          <CategoryFilterRow
+            categories={CATEGORIES}
+            activeCategory={activeCategory}
+            excludedCategories={excludedCategories}
+            exercises={exercises}
+            categoryCounts={categoryCounts}
+            onSelect={(cat) => {
+              if (cat === "All") {
+                updateParams({ cat: "All", exclude: null })
+              } else if (excludedCategories.has(cat)) {
+                // Tap an excluded category to un-exclude it
+                const next = new Set(excludedCategories)
+                next.delete(cat)
+                const excludeStr = [...next].join(",") || null
+                updateParams({ exclude: excludeStr })
+              } else {
+                updateParams({ cat, exclude: null })
+              }
+            }}
+            onLongPress={(cat) => {
+              if (cat === "All") return
+              // Long-press toggles exclusion, switching to "All" if needed
+              const next = new Set(excludedCategories)
+              if (next.has(cat)) next.delete(cat)
+              else next.add(cat)
+              const excludeStr = [...next].join(",") || null
+              updateParams({ cat: "All", exclude: excludeStr })
+            }}
+          />
 
           {/* Sort options */}
           <div className="flex items-center gap-2 mt-2.5">
