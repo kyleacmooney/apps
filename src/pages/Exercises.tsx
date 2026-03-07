@@ -407,7 +407,7 @@ function CategoryFilterButton({
 
   function handlePointerDown() {
     didLongPress.current = false
-    if (canLongPress && cat !== "All") {
+    if (canLongPress && cat !== "All" && !isExcluded) {
       setPressing(true)
     }
     longPressTimer.current = setTimeout(() => {
