@@ -789,7 +789,7 @@ export function Exercises() {
           />
 
           {/* Sort options */}
-          <div className="flex items-center gap-2 mt-2.5">
+          <div className="flex items-center gap-2 mt-2.5 select-none">
             <span className="text-text-dim text-[11px] font-mono">Sort:</span>
             {SORT_OPTIONS.map((opt) => (
               <button
