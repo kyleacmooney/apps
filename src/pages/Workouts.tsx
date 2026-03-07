@@ -77,6 +77,93 @@ const SECTION_LABELS: Record<string, string> = {
 }
 
 
+const LONG_PRESS_MS = 500
+
+function SessionTypeFilterButton({
+  type,
+  isActive,
+  isExcluded,
+  count,
+  canLongPress,
+  onSelect,
+  onLongPress,
+}: {
+  type: string
+  isActive: boolean
+  isExcluded: boolean
+  count: number
+  canLongPress: boolean
+  onSelect: () => void
+  onLongPress: () => void
+}) {
+  const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const didLongPress = useRef(false)
+  const [pressing, setPressing] = useState(false)
+  const [justToggled, setJustToggled] = useState(false)
+  const style = type !== "all" ? SESSION_TYPE_STYLES[type] : null
+
+  function handlePointerDown() {
+    didLongPress.current = false
+    if (canLongPress && type !== "all" && !isExcluded) {
+      setPressing(true)
+    }
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true
+      setPressing(false)
+      setJustToggled(true)
+      setTimeout(() => setJustToggled(false), 400)
+      onLongPress()
+    }, LONG_PRESS_MS)
+  }
+
+  function handlePointerUp() {
+    clearTimeout(longPressTimer.current)
+    setPressing(false)
+  }
+
+  return (
+    <button
+      onClick={() => {
+        if (didLongPress.current) return
+        onSelect()
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onContextMenu={(e) => e.preventDefault()}
+      className={cn(
+        "relative shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap capitalize select-none touch-manipulation overflow-hidden",
+        "transition-all duration-200",
+        justToggled && "animate-[filter-pop_0.4s_ease-out]",
+        isExcluded
+          ? "border-upper-push-border/40 bg-upper-push-bg/30 text-text-dim line-through"
+          : isActive && style
+            ? `${style} border-transparent`
+            : isActive
+              ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
+              : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+      )}
+    >
+      {/* Long-press progress fill */}
+      {pressing && (
+        <span
+          className="absolute inset-0 rounded-lg opacity-20 animate-[filter-fill_0.5s_linear_forwards] origin-left"
+          style={{
+            background: isExcluded
+              ? "var(--color-lower)"
+              : "var(--color-upper-push)",
+          }}
+        />
+      )}
+      <span className="relative flex items-center gap-0.5">
+        {isExcluded && <X className="w-3 h-3 inline -ml-0.5" />}
+        {formatEnum(type)}
+        <span className="ml-1 opacity-60 font-mono text-[11px]">{count}</span>
+      </span>
+    </button>
+  )
+}
+
 function EnergyBar({ level }: { level: number }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -642,6 +729,7 @@ export function Workouts() {
 
   // Session type filter
   const [activeFilter, setActiveFilter] = useState<string>("all")
+  const [excludedTypes, setExcludedTypes] = useState<Set<string>>(new Set())
 
   // Deep-link
   const [linkedSession, setLinkedSession] = useState<WorkoutSession | null>(null)
@@ -726,7 +814,7 @@ export function Workouts() {
   // Week-grouped sessions (with filter applied)
   const weekGroups = useMemo(() => {
     let filtered = activeFilter === "all"
-      ? sessions
+      ? sessions.filter((s) => !excludedTypes.has(s.session_type))
       : sessions.filter((s) => s.session_type === activeFilter)
 
     // Exclude linked session from timeline to avoid duplication
@@ -748,12 +836,16 @@ export function Workouts() {
         label: getWeekLabel(weekStart),
         sessions: weekSessions, // already sorted desc from query
       }))
-  }, [sessions, activeFilter, linkedSession])
+  }, [sessions, activeFilter, excludedTypes, linkedSession])
 
   const filteredCount = useMemo(() => {
-    if (activeFilter === "all") return sessions.length
+    if (activeFilter === "all") {
+      return excludedTypes.size > 0
+        ? sessions.filter((s) => !excludedTypes.has(s.session_type)).length
+        : sessions.length
+    }
     return sessions.filter((s) => s.session_type === activeFilter).length
-  }, [sessions, activeFilter])
+  }, [sessions, activeFilter, excludedTypes])
 
   const toggleSession = useCallback((id: string) => {
     setExpandedSessionIds((prev) => {
@@ -817,7 +909,7 @@ export function Workouts() {
                   </h1>
                   {viewMode === "list" && (
                     <span className="text-text-dim text-xs font-mono font-medium">
-                      {activeFilter === "all"
+                      {activeFilter === "all" && excludedTypes.size === 0
                         ? sessions.length
                         : `${filteredCount} / ${sessions.length}`}
                     </span>
@@ -874,30 +966,63 @@ export function Workouts() {
 
           {/* Session type filter pills — list view only */}
           {viewMode === "list" && (
-            <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
-              {allTypes.map((type) => {
-                const isActive = activeFilter === type
-                const count = typeCounts[type] ?? 0
-                const style = type !== "all" ? SESSION_TYPE_STYLES[type] : null
+            <div>
+              <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
+                {allTypes.map((type) => {
+                  const isActive = activeFilter === type
+                  const isExcluded = type !== "all" && excludedTypes.has(type)
+                  const count = type === "all"
+                    ? sessions.length - sessions.filter((s) => excludedTypes.has(s.session_type)).length
+                    : typeCounts[type] ?? 0
+                  const canLongPress = activeFilter === "all"
 
-                return (
-                  <button
-                    key={type}
-                    onClick={() => setActiveFilter(type)}
-                    className={cn(
-                      "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer whitespace-nowrap capitalize",
-                      isActive && style
-                        ? `${style} border-transparent`
-                        : isActive
-                          ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
-                          : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-                    )}
-                  >
-                    {formatEnum(type)}
-                    <span className="ml-1.5 opacity-60 font-mono text-[11px]">{count}</span>
-                  </button>
-                )
-              })}
+                  return (
+                    <SessionTypeFilterButton
+                      key={type}
+                      type={type}
+                      isActive={isActive}
+                      isExcluded={isExcluded}
+                      count={count}
+                      canLongPress={canLongPress}
+                      onSelect={() => {
+                        if (type === "all") {
+                          setActiveFilter("all")
+                          setExcludedTypes(new Set())
+                        } else if (excludedTypes.has(type)) {
+                          // Tap an excluded type to un-exclude it
+                          setExcludedTypes((prev) => {
+                            const next = new Set(prev)
+                            next.delete(type)
+                            return next
+                          })
+                        } else {
+                          setActiveFilter(type)
+                          setExcludedTypes(new Set())
+                        }
+                      }}
+                      onLongPress={() => {
+                        if (type === "all" || activeFilter !== "all") return
+                        setExcludedTypes((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(type)) next.delete(type)
+                          else next.add(type)
+                          return next
+                        })
+                      }}
+                    />
+                  )
+                })}
+              </div>
+              {activeFilter === "all" && excludedTypes.size === 0 && (
+                <p className="text-text-dim text-[10px] font-mono mt-1.5 ml-0.5 opacity-60">
+                  Hold a type to exclude it
+                </p>
+              )}
+              {activeFilter === "all" && excludedTypes.size > 0 && (
+                <p className="text-upper-push/60 text-[10px] font-mono mt-1.5 ml-0.5">
+                  {excludedTypes.size} excluded — tap to restore
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -956,9 +1081,9 @@ export function Workouts() {
                     ? "No sessions logged yet."
                     : "No sessions match this filter."}
                 </p>
-                {activeFilter !== "all" && sessions.length > 0 && (
+                {(activeFilter !== "all" || excludedTypes.size > 0) && sessions.length > 0 && (
                   <button
-                    onClick={() => setActiveFilter("all")}
+                    onClick={() => { setActiveFilter("all"); setExcludedTypes(new Set()) }}
                     className="text-core text-sm mt-2 hover:underline"
                   >
                     Show all sessions
