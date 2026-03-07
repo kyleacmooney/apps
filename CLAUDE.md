@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Single-page React app serving personal tools at https://kyleacmooney.github.io/apps/. Uses HashRouter for GitHub Pages compatibility and Supabase for auth + data.
+Mobile-first single-page React app serving personal tools at https://kyleacmooney.github.io/apps/. Uses HashRouter for GitHub Pages compatibility and Supabase for auth + data. All UI decisions should prioritize touch interactions, thumb-reachable layouts, and mobile viewport ergonomics.
 
 ## Commands
 
