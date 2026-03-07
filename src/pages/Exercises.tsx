@@ -8,6 +8,33 @@ import { ArrowLeft, ArrowRight, Search, ChevronDown, ChevronRight, Target, Alert
 import { cn } from "@/lib/utils"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 
+/** Render simple inline markdown (**bold**, *italic*) as React elements */
+function renderMarkdown(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = []
+  // Match **bold** or *italic*
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    if (match[2]) {
+      // **bold**
+      parts.push(<strong key={match.index} className="text-text-primary font-semibold">{match[2]}</strong>)
+    } else if (match[3]) {
+      // *italic*
+      parts.push(<em key={match.index}>{match[3]}</em>)
+    }
+    lastIndex = regex.lastIndex
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+  return parts
+}
+
 interface Exercise {
   id: string
   name: string
@@ -288,7 +315,7 @@ function ExerciseCard({
                   </span>
                 </div>
                 <p className="text-text-secondary text-[13.5px] leading-relaxed m-0 pl-5">
-                  {exercise[section.key]}
+                  {renderMarkdown(exercise[section.key]!)}
                 </p>
               </div>
             )
@@ -329,7 +356,7 @@ function ExerciseCard({
                         <div key={i} className="h-2.5" />
                       ) : (
                         <p key={i} className="text-text-secondary text-[13.5px] leading-relaxed m-0">
-                          {line}
+                          {renderMarkdown(line)}
                         </p>
                       )
                     ))}
