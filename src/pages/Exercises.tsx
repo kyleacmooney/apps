@@ -787,12 +787,13 @@ export function Exercises() {
             }}
             onLongPress={(cat) => {
               if (cat === "All") return
-              // Long-press toggles exclusion, switching to "All" if needed
+              // Long-press only works from "All" view — exclusion subtracts from the full list
+              if (activeCategory !== "All") return
               const next = new Set(excludedCategories)
               if (next.has(cat)) next.delete(cat)
               else next.add(cat)
               const excludeStr = [...next].join(",") || null
-              updateParams({ cat: "All", exclude: excludeStr })
+              updateParams({ exclude: excludeStr })
             }}
           />
 
