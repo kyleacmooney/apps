@@ -28,6 +28,8 @@ src/
   pages/Home.tsx               # Landing page with nav cards
   pages/Exercises.tsx          # Exercise encyclopedia with search/filters
   pages/Workouts.tsx           # Workout session history
+docs/
+  workout-logging-instructions.md  # Claude.ai prompt for logging workouts to Supabase
 ```
 
 ## Key Patterns
@@ -47,6 +49,7 @@ src/
 - Project: `claude-managed` (ID: `svmjtlsdyghxilpcdywc`)
 - Auth: Google OAuth
 - Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets` — all RLS-enabled
+- **Workout logging instructions** (used in Claude.ai conversations): [`docs/workout-logging-instructions.md`](docs/workout-logging-instructions.md)
 
 ## Preview Verification
 
