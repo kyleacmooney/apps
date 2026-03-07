@@ -61,4 +61,5 @@ When using `preview_*` tools to verify changes:
 
 ## Deployment
 
-Push to `main` → GitHub Actions builds and deploys to GitHub Pages. Workflow: `.github/workflows/deploy.yml`.
+- Push to `main` → GitHub Actions builds and deploys to GitHub Pages. Workflow: `.github/workflows/deploy.yml`.
+- **Auto-merge:** Pushes to `claude/*` branches are automatically fast-forward merged to `main` and the branch is deleted. Workflow: `.github/workflows/auto-merge-claude.yml`. This means every push you make gets deployed — treat each push as a production deploy.
