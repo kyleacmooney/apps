@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
 import { computeDefaultSchedules } from '@/lib/plant-care-algorithm'
@@ -94,41 +94,22 @@ function addDaysStr(days: number): string {
 
 // ─── Species Search (Perenual edge function) ──────────────────
 
-async function searchPerenual(
-  query: string,
-  accessToken: string,
-): Promise<PerenualSearchResult[]> {
-  const res = await fetch(
-    `${SUPABASE_URL}/functions/v1/perenual-proxy?action=search&q=${encodeURIComponent(query)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        apikey: SUPABASE_ANON_KEY,
-      },
-    },
-  )
-  if (!res.ok) return []
-  const json = await res.json()
-  return (json.data ?? []).filter(
+async function searchPerenual(query: string): Promise<PerenualSearchResult[]> {
+  const { data, error } = await supabase.functions.invoke('perenual-proxy', {
+    body: { action: 'search', q: query },
+  })
+  if (error) return []
+  return ((data as Record<string, unknown>)?.data as PerenualSearchResult[] ?? []).filter(
     (s: PerenualSearchResult) => s.id <= 3000, // free tier
   )
 }
 
-async function fetchPerenualDetails(
-  id: number,
-  accessToken: string,
-): Promise<Record<string, unknown> | null> {
-  const res = await fetch(
-    `${SUPABASE_URL}/functions/v1/perenual-proxy?action=details&id=${id}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        apikey: SUPABASE_ANON_KEY,
-      },
-    },
-  )
-  if (!res.ok) return null
-  return res.json()
+async function fetchPerenualDetails(id: number): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase.functions.invoke('perenual-proxy', {
+    body: { action: 'details', id },
+  })
+  if (error) return null
+  return data as Record<string, unknown>
 }
 
 // ─── Sub-components ──────────────────────────────────────
@@ -294,7 +275,6 @@ function AddPlantDialog({
   userId: string
   onSuccess: () => void
 }) {
-  const { session } = useAuth()
   const queryClient = useQueryClient()
 
   // Form state
@@ -325,8 +305,8 @@ function AddPlantDialog({
 
   const { data: searchResults = [], isFetching: isSearching } = useQuery({
     queryKey: ['perenual', 'search', debouncedQuery],
-    queryFn: () => searchPerenual(debouncedQuery, session?.access_token ?? ''),
-    enabled: debouncedQuery.length >= 2 && !manualMode && !!session?.access_token,
+    queryFn: () => searchPerenual(debouncedQuery),
+    enabled: debouncedQuery.length >= 2 && !manualMode,
     staleTime: 60_000,
   })
 
@@ -342,13 +322,11 @@ function AddPlantDialog({
     setShowResults(false)
 
     // Fetch details for more accurate watering data
-    if (session?.access_token) {
-      fetchPerenualDetails(result.id, session.access_token).then((details) => {
-        if (details?.watering) {
-          setApiWatering((details.watering as string).toLowerCase() as WateringFrequency)
-        }
-      })
-    }
+    fetchPerenualDetails(result.id).then((details) => {
+      if (details?.watering) {
+        setApiWatering((details.watering as string).toLowerCase() as WateringFrequency)
+      }
+    })
   }
 
   const createPlant = useMutation({
