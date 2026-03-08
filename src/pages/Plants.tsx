@@ -249,11 +249,15 @@ function RoomSection({
           </button>
         )}
       </div>
-      <div className="grid grid-cols-1 gap-2">
-        {plants.map((plant) => (
-          <PlantCard key={plant.id} plant={plant} onClick={() => onPlantClick(plant)} />
-        ))}
-      </div>
+      {plants.length === 0 ? (
+        <p className="text-xs text-text-dim px-1 italic">No plants in this room</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-2">
+          {plants.map((plant) => (
+            <PlantCard key={plant.id} plant={plant} onClick={() => onPlantClick(plant)} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -612,21 +616,32 @@ function RoomDialog({
   onOpenChange,
   room,
   userId,
+  existingRooms,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   room: Room | null
   userId: string
+  existingRooms: Room[]
 }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(room?.name ?? '')
+  const [error, setError] = useState('')
 
   useEffect(() => {
     setName(room?.name ?? '')
-  }, [room])
+    setError('')
+  }, [room, open])
+
+  const isDuplicate = existingRooms.some(
+    (r) => r.id !== room?.id && r.name.trim().toLowerCase() === name.trim().toLowerCase()
+  )
 
   const upsertRoom = useMutation({
     mutationFn: async () => {
+      if (isDuplicate) {
+        throw new Error('A room with this name already exists')
+      }
       if (room) {
         const { error } = await supabase
           .from('rooms')
@@ -644,6 +659,9 @@ function RoomDialog({
       queryClient.invalidateQueries({ queryKey: ['rooms'] })
       queryClient.invalidateQueries({ queryKey: ['plants'] })
       onOpenChange(false)
+    },
+    onError: (err) => {
+      setError(err.message)
     },
   })
 
@@ -679,6 +697,12 @@ function RoomDialog({
             className="bg-bg-elevated border-border-default text-text-primary placeholder:text-text-dim"
             autoFocus
           />
+          {isDuplicate && (
+            <p className="text-red-400 text-xs">A room with this name already exists.</p>
+          )}
+          {error && !isDuplicate && (
+            <p className="text-red-400 text-xs">{error}</p>
+          )}
           <div className="flex gap-2">
             {room && (
               <button
@@ -697,7 +721,7 @@ function RoomDialog({
             </button>
             <button
               onClick={() => upsertRoom.mutate()}
-              disabled={!name.trim() || upsertRoom.isPending}
+              disabled={!name.trim() || isDuplicate || upsertRoom.isPending}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-plant text-bg-primary hover:bg-plant/90 transition-colors cursor-pointer disabled:opacity-50"
             >
               {room ? 'Save' : 'Add'}
@@ -715,14 +739,29 @@ function PlantDetailSheet({
   plant,
   visible,
   onClose,
+  rooms,
 }: {
   plant: Plant | null
   visible: boolean
   onClose: () => void
+  rooms: Room[]
 }) {
   const queryClient = useQueryClient()
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null)
   const [editInterval, setEditInterval] = useState('')
+
+  const updateRoom = useMutation({
+    mutationFn: async (roomId: string | null) => {
+      const { error } = await supabase
+        .from('plants')
+        .update({ room_id: roomId, updated_at: new Date().toISOString() })
+        .eq('id', plant!.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants'] })
+    },
+  })
 
   const { data: schedules = [] } = useQuery({
     queryKey: ['plants', 'care-schedules', plant?.id],
@@ -850,11 +889,23 @@ function PlantDetailSheet({
           </div>
           {/* Plant info chips */}
           <div className="flex flex-wrap gap-1.5 mt-3">
-            {plant.rooms && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted">
-                {(plant.rooms as Room).name}
-              </span>
-            )}
+            <Select
+              value={plant.room_id ?? '__none__'}
+              onValueChange={(v) => updateRoom.mutate(v === '__none__' ? null : v)}
+            >
+              <SelectTrigger className="h-auto text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted border-none gap-1 w-auto">
+                <Home className="w-3 h-3 shrink-0" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-bg-elevated border-border-default">
+                <SelectItem value="__none__" className="text-text-muted text-xs">No room</SelectItem>
+                {rooms.map((r) => (
+                  <SelectItem key={r.id} value={r.id} className="text-text-primary text-xs">
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {plant.pot_material && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted capitalize">
                 {plant.pot_material}
@@ -1409,7 +1460,7 @@ export function Plants() {
               </button>
             </div>
 
-            {plants.length === 0 ? (
+            {plants.length === 0 && rooms.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-plant-bg flex items-center justify-center mb-4">
                   <Leaf className="w-8 h-8 text-plant" />
@@ -1430,7 +1481,6 @@ export function Plants() {
                 {/* Plants grouped by room */}
                 {rooms.map((room) => {
                   const roomPlants = plantsByRoom.get(room.id) ?? []
-                  if (roomPlants.length === 0) return null
                   return (
                     <RoomSection
                       key={room.id}
@@ -1471,6 +1521,7 @@ export function Plants() {
         onOpenChange={setRoomDialogOpen}
         room={editingRoom}
         userId={userId}
+        existingRooms={rooms}
       />
 
       {/* Plant detail bottom sheet */}
@@ -1479,6 +1530,7 @@ export function Plants() {
           plant={selectedPlant}
           visible={sheetVisible}
           onClose={closeSheet}
+          rooms={rooms}
         />
       )}
     </div>
