@@ -59,6 +59,7 @@ supabase/
 - **Tooling:** Claude Code has access to both the Supabase MCP server and the Supabase CLI (`supabase` command via Bash)
 - Project: `claude-managed` (ID: `svmjtlsdyghxilpcdywc`)
 - Auth: Google OAuth
+- **Multi-user:** All tables have `user_id` columns with RLS policies enforcing `auth.uid() = user_id`. Views use `security_invoker = true` so RLS applies to the calling user. Exercises are per-user (unique constraint on `(user_id, name)`). `workout_exercises` and `workout_sets` inherit user scoping via FK chain to `workout_sessions`.
 - Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles` — all RLS-enabled
 - Edge Functions: `proxy-image-upload` (downloads external image URLs and self-hosts them in Supabase Storage, updating `species_profiles.image_url`)
 - Storage: `plant-photos` bucket (public read) — stores species reference images under `species/` and user-uploaded plant photos

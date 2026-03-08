@@ -2,10 +2,17 @@
 
 Instructions for Claude.ai to log workout sessions to the Supabase database (project ID: `svmjtlsdyghxilpcdywc`) using `Supabase:execute_sql`. Use a single `DO $$ ... $$` block to insert everything atomically.
 
+## Multi-user context
+
+- The database is multi-user. Always include `user_id` when inserting into `exercises` and `workout_sessions`.
+- Get the current user's ID with `auth.uid()` in RLS-enabled queries, or look up by email: `SELECT id FROM auth.users WHERE email = '<user_email>'`
+- When querying exercises, scope by user: `SELECT id FROM exercises WHERE name = '...' AND user_id = auth.uid()`
+
 ## Schema: 3 tables
 
 ### `workout_sessions` — one row per session
 
+- `user_id` (uuid FK to auth.users, NOT NULL — always set to the current user's ID)
 - `date` (date, use correct year — currently 2026), `time_of_day` (text: morning/afternoon/evening/night), `title` (text), `location` (text: 'apartment gym', 'LA Fitness', 'home'), `session_type` (enum: workout/mobility/grip_training/sitting_practice/mixed), `status` (session_status enum: completed/planned, default 'completed'), `energy_level` (energy_level enum: low/moderate/high/full_send, nullable), `energy_rating` (smallint 1–10, nullable — ask at end of session), `body_state` (body_state enum: fresh/sore/tight/beat_up/recovering, nullable), `notes` (text — overall takeaways, PRs, injuries)
 
 ### `workout_exercises` — one row per exercise in the session
@@ -18,7 +25,7 @@ Instructions for Claude.ai to log workout sessions to the Supabase database (pro
 
 ## Key rules
 
-- Query the `exercises` table first to get current IDs for linking `exercise_id` where applicable
+- Query the `exercises` table first to get current IDs for linking `exercise_id` where applicable — always filter by the current user's `user_id`
 - Use nullable fields appropriately: reps-only exercises (pushups, dead bugs) have NULL weight/duration; timed exercises (hangs, wall sits) have NULL reps; carries have both duration and weight; stretches in cooldown may have no sets at all
 - Flag PRs with `is_pr = true` and add context in set-level `notes`
 - For drop sets like "9 @ 75 + 3 @ 67.5", create two separate set rows with sequential set_numbers and note "drop set" on the second
@@ -36,7 +43,7 @@ When logging a workout, if an exercise (including stretches and mobility work) d
 
 ### `exercises` table schema
 
-- `id` (uuid PK, default gen_random_uuid()), `name` (text, unique), `category` (exercise_category enum), `form_cues` (text, nullable), `common_mistakes` (text, nullable), `current_working` (text, nullable), `progression` (text, nullable), `detailed_walkthrough` (text, nullable), `personal_notes` (text, nullable), `created_at`/`updated_at` (timestamptz, default now())
+- `id` (uuid PK, default gen_random_uuid()), `user_id` (uuid FK to auth.users, NOT NULL), `name` (text, unique per user — constraint: `UNIQUE (user_id, name)`), `category` (exercise_category enum), `form_cues` (text, nullable), `common_mistakes` (text, nullable), `current_working` (text, nullable), `progression` (text, nullable), `detailed_walkthrough` (text, nullable), `personal_notes` (text, nullable), `created_at`/`updated_at` (timestamptz, default now())
 
 ### Category enum values
 
@@ -45,10 +52,11 @@ When logging a workout, if an exercise (including stretches and mobility work) d
 ### Rules
 
 - Add all exercises including stretches and mobility work — stretches go under 'Mobility & Posture' category
+- Always include `user_id` when inserting exercises
 - Populate `form_cues` with the key cues discussed during the session
 - Populate `common_mistakes` if any form issues came up during the session
 - Populate `current_working` with the weight/rep ranges from the current session (e.g. "3×15 @ 15lb" or "bodyweight, 5 reps"); for stretches, note hold duration (e.g. "30s each side")
-- Populate `personal_notes` with any shoulder/grip/asymmetry notes specific to Kyle
+- Populate `personal_notes` with any shoulder/grip/asymmetry notes specific to the user
 - `progression` can be filled in if a clear next step was discussed, otherwise leave NULL
 - After inserting, use the new ID to link `exercise_id` in the workout log
 - After logging a session, update current_working on any existing exercises where the session reflects new weight/rep benchmarks or progression beyond what's currently recorded
@@ -58,38 +66,39 @@ When logging a workout, if an exercise (including stretches and mobility work) d
 
 ## Planning a workout
 
-When Kyle wants to plan their next workout, insert into the same 3 tables with `status = 'planned'`.
+When the user wants to plan their next workout, insert into the same 3 tables with `status = 'planned'`.
 
 ### Key differences from logging a completed session
 
 - Set `status` to `'planned'` on the `workout_sessions` insert
 - Use the intended workout date (or next day if unspecified)
 - `energy_level`, `energy_rating`, and `body_state` should be NULL
-- `time_of_day` can be set if Kyle specifies when they plan to train
+- `time_of_day` can be set if the user specifies when they plan to train
 - `title` should describe the planned session (e.g., "Upper Pull Day A")
 - `notes` can include the plan's intent/focus (e.g., "Focus on progressive overload for rows")
-- Sets should use target weights/reps (what Kyle intends to hit)
+- Sets should use target weights/reps (what the user intends to hit)
 - `is_pr` should always be false for planned sets
-- Only one planned session should exist at a time — if a previous plan exists, delete it first (`DELETE FROM workout_sessions WHERE status = 'planned'`, CASCADE FKs handle child rows)
+- Only one planned session should exist at a time per user — if a previous plan exists, delete it first (`DELETE FROM workout_sessions WHERE status = 'planned' AND user_id = auth.uid()`, CASCADE FKs handle child rows)
 
 ### Example
 
 ```sql
 DO $$
 DECLARE
+  v_user_id uuid := auth.uid();
   v_session_id uuid;
   v_ex1_id uuid;
 BEGIN
-  -- Delete any existing planned session
-  DELETE FROM workout_sessions WHERE status = 'planned';
+  -- Delete any existing planned session for this user
+  DELETE FROM workout_sessions WHERE status = 'planned' AND user_id = v_user_id;
 
-  INSERT INTO workout_sessions (date, title, session_type, status, location, notes)
-  VALUES ('2026-03-10', 'Upper Pull Day', 'workout', 'planned', 'apartment gym',
+  INSERT INTO workout_sessions (user_id, date, title, session_type, status, location, notes)
+  VALUES (v_user_id, '2026-03-10', 'Upper Pull Day', 'workout', 'planned', 'apartment gym',
           'Focus on heavy rows, add 2.5lb to DB rows')
   RETURNING id INTO v_session_id;
 
   INSERT INTO workout_exercises (session_id, exercise_name, exercise_id, section, position)
-  VALUES (v_session_id, 'Dead Hang', (SELECT id FROM exercises WHERE name = 'Dead Hang'), 'warmup', 1)
+  VALUES (v_session_id, 'Dead Hang', (SELECT id FROM exercises WHERE name = 'Dead Hang' AND user_id = v_user_id), 'warmup', 1)
   RETURNING id INTO v_ex1_id;
 
   INSERT INTO workout_sets (workout_exercise_id, set_number, duration_seconds) VALUES
@@ -101,4 +110,4 @@ END $$;
 
 ### Dismissing a planned workout
 
-The app has a "Dismiss Plan" button that deletes the planned session from the UI. Alternatively, Kyle can ask to delete the plan via conversation.
+The app has a "Dismiss Plan" button that deletes the planned session from the UI. Alternatively, the user can ask to delete the plan via conversation.

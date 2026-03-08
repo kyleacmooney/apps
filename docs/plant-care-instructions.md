@@ -2,6 +2,12 @@
 
 Instructions for Claude.ai to manage plant care data in Supabase (project ID: `svmjtlsdyghxilpcdywc`) using `Supabase:execute_sql`. The web app at kyleacmooney.github.io/apps/#/plants reads this data for care scheduling, plant detail views, and the to-do dashboard.
 
+## Multi-user context
+
+- The database is multi-user. Always include `user_id` when inserting into any plant-related table.
+- Get the current user's ID with `auth.uid()` in RLS-enabled queries, or look up by email: `SELECT id FROM auth.users WHERE email = '<user_email>'`
+- Always scope queries by user when updating or querying by nickname/name to avoid cross-user collisions.
+
 ## Schema Overview
 
 ### `rooms` — where plants live
@@ -62,9 +68,9 @@ This is the **primary source of species information**. Claude.ai creates a profi
 
 This is the primary Claude.ai workflow. When the user adds a new plant or asks about a species:
 
-1. Check if a profile already exists:
+1. Check if a profile already exists for this user:
 ```sql
-SELECT * FROM species_profiles WHERE species_common_name ILIKE 'Monstera Deliciosa';
+SELECT * FROM species_profiles WHERE species_common_name ILIKE 'Monstera Deliciosa' AND user_id = auth.uid();
 ```
 
 2. Research the species and INSERT/UPSERT the profile. Find a good reference image from Wikipedia/Wikimedia Commons (look for a clear photo of the plant, preferably CC-licensed):
@@ -76,7 +82,7 @@ INSERT INTO species_profiles (
   care_summary, common_problems, propagation_tips, seasonal_care_notes, fun_facts,
   updated_at
 ) VALUES (
-  (SELECT id FROM auth.users LIMIT 1),
+  auth.uid(),
   'Swiss cheese plant', 'Monstera deliciosa',
   'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Monstera_deliciosa_example.jpg/800px-Monstera_deliciosa_example.jpg',
   7, 'high', 65, 85,
@@ -112,7 +118,8 @@ SELECT net.http_post(
   url := 'https://svmjtlsdyghxilpcdywc.supabase.co/functions/v1/proxy-image-upload',
   body := jsonb_build_object(
     'source_url', 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Monstera_deliciosa_example.jpg/800px-Monstera_deliciosa_example.jpg',
-    'species_common_name', 'Swiss cheese plant'
+    'species_common_name', 'Swiss cheese plant',
+    'user_id', auth.uid()::text
   ),
   headers := jsonb_build_object('Content-Type', 'application/json')
 );
@@ -126,7 +133,7 @@ When advice is specific to a plant instance (not the species in general):
 
 ```sql
 UPDATE plants SET notes = 'Showing signs of root rot — repotted on 2026-03-08 into fresh soil with extra perlite. Monitor for 2 weeks before resuming normal watering.', updated_at = now()
-WHERE nickname = 'Big Monstera';
+WHERE nickname = 'Big Monstera' AND user_id = auth.uid();
 ```
 
 ### Adjust a care schedule based on research
@@ -136,7 +143,7 @@ If research reveals a plant needs more/less frequent care:
 ```sql
 UPDATE care_schedules
 SET interval_days = 5, is_custom = true, updated_at = now()
-WHERE plant_id = (SELECT id FROM plants WHERE nickname = 'Big Monstera')
+WHERE plant_id = (SELECT id FROM plants WHERE nickname = 'Big Monstera' AND user_id = auth.uid())
   AND care_type = 'water';
 ```
 
@@ -146,19 +153,19 @@ WHERE plant_id = (SELECT id FROM plants WHERE nickname = 'Big Monstera')
 -- All active plants with their rooms
 SELECT p.nickname, p.species_common_name, r.name as room, p.pot_material, p.pot_size, p.light_level
 FROM plants p LEFT JOIN rooms r ON p.room_id = r.id
-WHERE p.is_archived = false
+WHERE p.is_archived = false AND p.user_id = auth.uid()
 ORDER BY r.name, p.nickname;
 
 -- Upcoming care tasks
 SELECT cs.care_type, cs.next_due, cs.interval_days, p.nickname
 FROM care_schedules cs JOIN plants p ON cs.plant_id = p.id
-WHERE cs.is_enabled = true AND p.is_archived = false
+WHERE cs.is_enabled = true AND p.is_archived = false AND cs.user_id = auth.uid()
 ORDER BY cs.next_due;
 
 -- Care history for a specific plant
 SELECT cl.care_type, cl.status, cl.performed_at, cl.notes
 FROM care_logs cl JOIN plants p ON cl.plant_id = p.id
-WHERE p.nickname = 'Big Monstera'
+WHERE p.nickname = 'Big Monstera' AND cl.user_id = auth.uid()
 ORDER BY cl.performed_at DESC LIMIT 20;
 ```
 
@@ -166,10 +173,10 @@ ORDER BY cl.performed_at DESC LIMIT 20;
 
 ```sql
 DO $$ DECLARE v_plant_id uuid; v_interval integer; BEGIN
-  SELECT id INTO v_plant_id FROM plants WHERE nickname = 'Big Monstera';
+  SELECT id INTO v_plant_id FROM plants WHERE nickname = 'Big Monstera' AND user_id = auth.uid();
 
   INSERT INTO care_logs (user_id, plant_id, care_type, status, notes)
-  VALUES ((SELECT id FROM auth.users LIMIT 1), v_plant_id, 'water', 'done', 'Watered thoroughly, good drainage');
+  VALUES (auth.uid(), v_plant_id, 'water', 'done', 'Watered thoroughly, good drainage');
 
   SELECT interval_days INTO v_interval FROM care_schedules WHERE plant_id = v_plant_id AND care_type = 'water';
 
@@ -180,7 +187,8 @@ END $$;
 
 ## Rules
 
-- Always use `(SELECT id FROM auth.users LIMIT 1)` for `user_id` — there's only one user
+- Always use `auth.uid()` for `user_id` — the database is multi-user
+- Always scope queries by `user_id` when looking up by nickname or name to avoid cross-user collisions
 - Always use year 2026 for dates
 - **Every plant needs a species profile.** When the user mentions a new plant, proactively create a `species_profiles` entry with researched data and an image URL
 - When researching species, populate ALL fields (`care_summary`, `common_problems`, `propagation_tips`, `seasonal_care_notes`, `fun_facts`, `image_url`) — the plant detail view displays them

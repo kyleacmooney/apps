@@ -1024,6 +1024,26 @@ export function Workouts() {
     )
   }
 
+  if (sessions.length === 0 && plannedSessions.length === 0) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-5">
+        <Calendar className="w-12 h-12 text-text-dim mb-4" />
+        <h2 className="text-lg font-semibold text-text-primary mb-2">
+          No workouts yet
+        </h2>
+        <p className="text-text-muted text-sm text-center max-w-xs mb-6">
+          Log your first workout through a conversation with Claude. Your session history will appear here automatically.
+        </p>
+        <Link
+          to="/"
+          className="px-5 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-primary text-sm font-medium hover:border-border-hover transition-colors no-underline"
+        >
+          Back to Home
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-bg-primary">
       {/* Header — sticky in list view */}

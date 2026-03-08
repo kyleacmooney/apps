@@ -759,6 +759,26 @@ export function Exercises() {
     )
   }
 
+  if (exercises.length === 0) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-5">
+        <BookOpen className="w-12 h-12 text-text-dim mb-4" />
+        <h2 className="text-lg font-semibold text-text-primary mb-2">
+          No exercises yet
+        </h2>
+        <p className="text-text-muted text-sm text-center max-w-xs mb-6">
+          Exercises are created automatically when you log workouts with Claude. Start a conversation to log your first workout.
+        </p>
+        <Link
+          to="/"
+          className="px-5 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-primary text-sm font-medium hover:border-border-hover transition-colors no-underline"
+        >
+          Back to Home
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-bg-primary">
       {/* Sticky header */}
