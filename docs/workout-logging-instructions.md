@@ -6,7 +6,7 @@ Instructions for Claude.ai to log workout sessions to the Supabase database (pro
 
 ### `workout_sessions` — one row per session
 
-- `date` (date, use correct year — currently 2026), `time_of_day` (text: morning/afternoon/evening/night), `title` (text), `location` (text: 'apartment gym', 'LA Fitness', 'home'), `session_type` (enum: workout/mobility/grip_training/sitting_practice/mixed), `energy_level` (energy_level enum: low/moderate/high/full_send, nullable), `energy_rating` (smallint 1–10, nullable — ask at end of session), `body_state` (body_state enum: fresh/sore/tight/beat_up/recovering, nullable), `notes` (text — overall takeaways, PRs, injuries)
+- `date` (date, use correct year — currently 2026), `time_of_day` (text: morning/afternoon/evening/night), `title` (text), `location` (text: 'apartment gym', 'LA Fitness', 'home'), `session_type` (enum: workout/mobility/grip_training/sitting_practice/mixed), `status` (session_status enum: completed/planned, default 'completed'), `energy_level` (energy_level enum: low/moderate/high/full_send, nullable), `energy_rating` (smallint 1–10, nullable — ask at end of session), `body_state` (body_state enum: fresh/sore/tight/beat_up/recovering, nullable), `notes` (text — overall takeaways, PRs, injuries)
 
 ### `workout_exercises` — one row per exercise in the session
 
@@ -55,3 +55,50 @@ When logging a workout, if an exercise (including stretches and mobility work) d
 - Keep `form_cues` concise (2-4 sentences max) — quick-reference setup, key positions, hold times
 - Use `detailed_walkthrough` for in-depth breakdowns: step-by-step setup, variations, why certain cues matter, common compensation patterns. Only populate when an exercise has enough nuance to warrant it — not every exercise needs one.
 - When updating an exercise's form_cues and the text is getting long or repetitive, move the detailed content to detailed_walkthrough and trim form_cues back to a summary.
+
+## Planning a workout
+
+When Kyle wants to plan their next workout, insert into the same 3 tables with `status = 'planned'`.
+
+### Key differences from logging a completed session
+
+- Set `status` to `'planned'` on the `workout_sessions` insert
+- Use the intended workout date (or next day if unspecified)
+- `energy_level`, `energy_rating`, and `body_state` should be NULL
+- `time_of_day` can be set if Kyle specifies when they plan to train
+- `title` should describe the planned session (e.g., "Upper Pull Day A")
+- `notes` can include the plan's intent/focus (e.g., "Focus on progressive overload for rows")
+- Sets should use target weights/reps (what Kyle intends to hit)
+- `is_pr` should always be false for planned sets
+- Only one planned session should exist at a time — if a previous plan exists, delete it first (`DELETE FROM workout_sessions WHERE status = 'planned'`, CASCADE FKs handle child rows)
+
+### Example
+
+```sql
+DO $$
+DECLARE
+  v_session_id uuid;
+  v_ex1_id uuid;
+BEGIN
+  -- Delete any existing planned session
+  DELETE FROM workout_sessions WHERE status = 'planned';
+
+  INSERT INTO workout_sessions (date, title, session_type, status, location, notes)
+  VALUES ('2026-03-10', 'Upper Pull Day', 'workout', 'planned', 'apartment gym',
+          'Focus on heavy rows, add 2.5lb to DB rows')
+  RETURNING id INTO v_session_id;
+
+  INSERT INTO workout_exercises (session_id, exercise_name, exercise_id, section, position)
+  VALUES (v_session_id, 'Dead Hang', (SELECT id FROM exercises WHERE name = 'Dead Hang'), 'warmup', 1)
+  RETURNING id INTO v_ex1_id;
+
+  INSERT INTO workout_sets (workout_exercise_id, set_number, duration_seconds) VALUES
+  (v_ex1_id, 1, 30);
+
+  -- ... more exercises and sets ...
+END $$;
+```
+
+### Dismissing a planned workout
+
+The app has a "Dismiss Plan" button that deletes the planned session from the UI. Alternatively, Kyle can ask to delete the plan via conversation.

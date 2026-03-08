@@ -25,6 +25,7 @@ interface WorkoutSession {
   date: string
   title: string | null
   session_type: string
+  status: string
   energy_level: string | null
   energy_rating: number | null
   body_state: string | null
@@ -43,7 +44,7 @@ function formatEnum(value: string): string {
 }
 
 const SESSION_SELECT = `
-  id, date, title, session_type, energy_level, energy_rating, body_state, time_of_day, location, notes,
+  id, date, title, session_type, status, energy_level, energy_rating, body_state, time_of_day, location, notes,
   workout_exercises (
     id, exercise_name, section, position, notes,
     workout_sets (
@@ -521,6 +522,7 @@ async function fetchMonth(y: number, m: number): Promise<WorkoutSession[]> {
   const { data } = await supabase
     .from("workout_sessions")
     .select(SESSION_SELECT)
+    .eq("status", "completed")
     .gte("date", firstDay)
     .lte("date", lastDay)
     .order("date", { ascending: false })
@@ -716,6 +718,132 @@ function CalendarView({
   )
 }
 
+function PlannedWorkoutCard({
+  session,
+  onDismiss,
+}: {
+  session: WorkoutSession
+  onDismiss: () => void
+}) {
+  const allExerciseIds = useMemo(
+    () => new Set(session.workout_exercises.map((e) => e.id)),
+    [session.workout_exercises]
+  )
+  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<string>>(allExerciseIds)
+  const [dismissing, setDismissing] = useState(false)
+
+  const sections = SECTION_ORDER
+    .map((key) => ({
+      key,
+      label: SECTION_LABELS[key] ?? key,
+      exercises: session.workout_exercises
+        .filter((e) => e.section === key)
+        .sort((a, b) => a.position - b.position),
+    }))
+    .filter((s) => s.exercises.length > 0)
+
+  const handleDismiss = async () => {
+    setDismissing(true)
+    // CASCADE FKs handle child rows automatically
+    await supabase
+      .from("workout_sessions")
+      .delete()
+      .eq("id", session.id)
+    onDismiss()
+  }
+
+  return (
+    <div className="rounded-xl bg-bg-secondary border-2 border-dashed border-core/30 p-4 sm:p-5">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className="text-text-primary font-semibold text-[15px] m-0">
+            {session.title ?? "Planned Workout"}
+          </h3>
+          <div className="flex items-center gap-3 mt-1">
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-text-dim" />
+              <span className="text-text-muted text-xs font-mono">
+                {parseLocalDate(session.date).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+            </div>
+            {session.location && (
+              <div className="flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-text-dim" />
+                <span className="text-text-muted text-xs font-mono">
+                  {session.location}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        <span className="shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wide px-2.5 py-1 rounded-md bg-core/15 text-core border border-core/30">
+          Planned
+        </span>
+      </div>
+
+      {/* Session notes */}
+      {session.notes && (
+        <div className="flex gap-1.5 mb-3">
+          <FileText className="w-3.5 h-3.5 text-text-dim shrink-0 mt-0.5" />
+          <p className="text-text-secondary text-sm leading-relaxed m-0">
+            {session.notes}
+          </p>
+        </div>
+      )}
+
+      {/* Exercise sections */}
+      {sections.map((section) => (
+        <div key={section.key} className="mt-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-text-dim text-[10px] font-bold font-mono uppercase tracking-widest">
+              {section.label}
+            </span>
+            <div className="flex-1 h-px bg-border-default" />
+          </div>
+          <div className="flex flex-col">
+            {section.exercises.map((ex) => (
+              <ExerciseRow
+                key={ex.id}
+                exercise={ex}
+                isExpanded={expandedExerciseIds.has(ex.id)}
+                onToggle={() =>
+                  setExpandedExerciseIds((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(ex.id)) next.delete(ex.id)
+                    else next.add(ex.id)
+                    return next
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Dismiss button */}
+      <button
+        onClick={handleDismiss}
+        disabled={dismissing}
+        className="mt-4 w-full py-2.5 rounded-lg border border-border-default bg-bg-elevated text-text-muted text-sm font-semibold hover:bg-bg-primary hover:text-text-secondary transition-all disabled:opacity-50"
+      >
+        {dismissing ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Dismissing...
+          </span>
+        ) : (
+          "Dismiss Plan"
+        )}
+      </button>
+    </div>
+  )
+}
+
 const PAGE_SIZE = 30
 const SESSION_TYPES = ["all", "workout", "mobility", "mixed"] as const
 
@@ -735,12 +863,28 @@ export function Workouts() {
   const [linkedSession, setLinkedSession] = useState<WorkoutSession | null>(null)
   const [linkedSessionLoading, setLinkedSessionLoading] = useState(false)
 
+  // Planned sessions
+  const plannedQuery = useQuery({
+    queryKey: ['workouts', 'planned'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workout_sessions")
+        .select(SESSION_SELECT)
+        .eq("status", "planned")
+        .order("date", { ascending: true })
+      if (error) throw error
+      return (data ?? []) as WorkoutSession[]
+    },
+  })
+  const plannedSessions = plannedQuery.data ?? []
+
   const sessionsQuery = useInfiniteQuery({
     queryKey: ['workouts', 'list'],
     queryFn: async ({ pageParam }) => {
       const { data, error } = await supabase
         .from("workout_sessions")
         .select(SESSION_SELECT)
+        .eq("status", "completed")
         .order("date", { ascending: false })
         .range(pageParam, pageParam + PAGE_SIZE - 1)
 
@@ -1032,6 +1176,27 @@ export function Workouts() {
       <div className="max-w-2xl mx-auto px-5 py-4 pb-10">
         {viewMode === "list" ? (
           <>
+            {/* Planned workout */}
+            {plannedSessions.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-core text-[11px] font-bold font-mono uppercase tracking-widest">
+                    Next Workout
+                  </span>
+                  <div className="flex-1 h-px bg-core/20" />
+                </div>
+                <div className="flex flex-col gap-3">
+                  {plannedSessions.map((s) => (
+                    <PlannedWorkoutCard
+                      key={s.id}
+                      session={s}
+                      onDismiss={() => queryClient.invalidateQueries({ queryKey: ['workouts', 'planned'] })}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Deep-linked session */}
             {linkedSessionLoading && (
               <div className="mb-4 p-4 rounded-xl border border-border-default bg-bg-secondary animate-pulse">
