@@ -94,6 +94,29 @@ function addDaysStr(days: number): string {
   return d.toISOString().split('T')[0]
 }
 
+function resizeImage(file: File, maxSize: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, w, h)
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('Failed to resize image'))),
+        'image/webp',
+        0.8,
+      )
+    }
+    img.onerror = () => reject(new Error('Failed to load image'))
+    img.src = URL.createObjectURL(file)
+  })
+}
+
 // ─── Species Search (Perenual edge function) ──────────────────
 
 async function searchPerenual(query: string): Promise<PerenualSearchResult[]> {
@@ -755,12 +778,12 @@ function PlantDetailSheet({
 
   const uploadPhoto = useMutation({
     mutationFn: async (file: File) => {
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `${plant!.user_id}/${plant!.id}.${ext}`
+      const resized = await resizeImage(file, 512)
+      const path = `${plant!.user_id}/${plant!.id}.webp`
 
       const { error: uploadError } = await supabase.storage
         .from('plant-photos')
-        .upload(path, file, { upsert: true })
+        .upload(path, resized, { upsert: true, contentType: 'image/webp' })
       if (uploadError) throw uploadError
 
       const { data: urlData } = supabase.storage
