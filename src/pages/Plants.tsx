@@ -10,7 +10,7 @@ import {
   POT_MATERIALS,
   POT_SIZES,
   LIGHT_LEVELS,
-  WATERING_OPTIONS,
+  WATERING_ESTIMATE_OPTIONS,
   daysOverdue,
   formatDueDate,
   pluralizeDays,
@@ -22,11 +22,9 @@ import type {
   CareLog,
   CareType,
   TodoItem,
-  PerenualSearchResult,
   PotMaterial,
   PotSize,
   LightLevel,
-  WateringFrequency,
   SpeciesProfile,
 } from '@/lib/plant-types'
 import {
@@ -77,7 +75,7 @@ const TODO_SELECT = `
 
 const PLANT_SELECT = `
   id, user_id, room_id, nickname, species_common_name, species_scientific_name,
-  perenual_id, species_thumbnail_url, api_watering, api_sunlight,
+  species_thumbnail_url,
   pot_material, pot_size, light_level, notes, is_archived, created_at, updated_at,
   rooms ( id, name )
 `
@@ -116,25 +114,6 @@ function resizeImage(file: File, maxSize: number): Promise<Blob> {
     img.src = URL.createObjectURL(file)
   })
 }
-
-// ─── Species Search (Perenual edge function) ──────────────────
-
-async function searchPerenual(query: string): Promise<PerenualSearchResult[]> {
-  const { data, error } = await supabase.functions.invoke('perenual-proxy', {
-    body: { action: 'search', q: query },
-  })
-  if (error) return []
-  return (data as Record<string, unknown>)?.data as PerenualSearchResult[] ?? []
-}
-
-async function fetchPerenualDetails(id: number): Promise<Record<string, unknown> | null> {
-  const { data, error } = await supabase.functions.invoke('perenual-proxy', {
-    body: { action: 'details', id },
-  })
-  if (error) return null
-  return data as Record<string, unknown>
-}
-
 // ─── Sub-components ──────────────────────────────────────
 
 function TodoCard({
@@ -308,59 +287,52 @@ function AddPlantDialog({
   const [nickname, setNickname] = useState('')
   const [speciesName, setSpeciesName] = useState('')
   const [scientificName, setScientificName] = useState('')
-  const [perenualId, setPerenualId] = useState<number | null>(null)
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
-  const [apiWatering, setApiWatering] = useState<WateringFrequency | null>(null)
-  const [apiSunlight, setApiSunlight] = useState<string[] | null>(null)
+  const [wateringEstimate, setWateringEstimate] = useState(7)
+  const [profileWatering, setProfileWatering] = useState<number | null>(null)
+  const [profileMisting, setProfileMisting] = useState<boolean | null>(null)
   const [roomId, setRoomId] = useState('__none__')
   const [potMaterial, setPotMaterial] = useState<PotMaterial>('ceramic')
   const [potSize, setPotSize] = useState<PotSize>('medium')
   const [lightLevel, setLightLevel] = useState<LightLevel>('medium')
-  const [manualMode, setManualMode] = useState(false)
-  const [manualWatering, setManualWatering] = useState<WateringFrequency>('average')
 
-  // Species search
-  const [searchQuery, setSearchQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [showResults, setShowResults] = useState(false)
+  // Species autocomplete
+  const [speciesQuery, setSpeciesQuery] = useState('')
+  const [debouncedSpeciesQuery, setDebouncedSpeciesQuery] = useState('')
+  const [showSuggestions, setShowSuggestions] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(searchQuery), 300)
+    const t = setTimeout(() => setDebouncedSpeciesQuery(speciesQuery), 300)
     return () => clearTimeout(t)
-  }, [searchQuery])
+  }, [speciesQuery])
 
-  const { data: searchResults = [], isFetching: isSearching } = useQuery({
-    queryKey: ['perenual', 'search', debouncedQuery],
-    queryFn: () => searchPerenual(debouncedQuery),
-    enabled: debouncedQuery.length >= 2 && !manualMode,
+  const { data: speciesSuggestions = [], isFetching: isSearching } = useQuery({
+    queryKey: ['species-profiles', 'search', debouncedSpeciesQuery],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('species_profiles')
+        .select('species_common_name, species_scientific_name, image_url, watering_interval_days, misting_needed')
+        .ilike('species_common_name', `%${debouncedSpeciesQuery}%`)
+        .limit(8)
+      return data ?? []
+    },
+    enabled: debouncedSpeciesQuery.length >= 2,
     staleTime: 60_000,
   })
 
-  function selectSpecies(result: PerenualSearchResult) {
-    setSpeciesName(result.common_name)
-    setScientificName(result.scientific_name?.[0] ?? '')
-    setPerenualId(result.id)
-    setThumbnailUrl(result.default_image?.thumbnail ?? result.default_image?.small_url ?? null)
-    setApiWatering((result.watering?.toLowerCase() as WateringFrequency) ?? null)
-    setApiSunlight(result.sunlight ?? null)
-    if (!nickname) setNickname(result.common_name)
-    setSearchQuery(result.common_name)
-    setShowResults(false)
-
-    // Fetch details for more accurate watering data (free tier: species 1-3000)
-    if (result.id <= 3000) {
-      fetchPerenualDetails(result.id).then((details) => {
-        if (details?.watering) {
-          setApiWatering((details.watering as string).toLowerCase() as WateringFrequency)
-        }
-      })
-    }
+  function selectProfile(profile: typeof speciesSuggestions[number]) {
+    setSpeciesName(profile.species_common_name)
+    setScientificName(profile.species_scientific_name ?? '')
+    setProfileWatering(profile.watering_interval_days)
+    setProfileMisting(profile.misting_needed)
+    if (!nickname) setNickname(profile.species_common_name)
+    setSpeciesQuery(profile.species_common_name)
+    setShowSuggestions(false)
   }
 
   const createPlant = useMutation({
     mutationFn: async () => {
-      const watering = manualMode ? manualWatering : apiWatering
+      const baseInterval = profileWatering ?? wateringEstimate
 
       const { data: plant, error } = await supabase
         .from('plants')
@@ -370,10 +342,6 @@ function AddPlantDialog({
           nickname: nickname.trim(),
           species_common_name: speciesName.trim() || nickname.trim(),
           species_scientific_name: scientificName || null,
-          perenual_id: perenualId,
-          species_thumbnail_url: thumbnailUrl,
-          api_watering: watering,
-          api_sunlight: apiSunlight,
           pot_material: potMaterial,
           pot_size: potSize,
           light_level: lightLevel,
@@ -382,7 +350,7 @@ function AddPlantDialog({
         .single()
       if (error) throw error
 
-      const schedules = computeDefaultSchedules(watering, potMaterial, potSize, lightLevel)
+      const schedules = computeDefaultSchedules(baseInterval, potMaterial, potSize, lightLevel, null, profileMisting)
       const { error: schedError } = await supabase
         .from('care_schedules')
         .insert(
@@ -411,22 +379,19 @@ function AddPlantDialog({
     setNickname('')
     setSpeciesName('')
     setScientificName('')
-    setPerenualId(null)
-    setThumbnailUrl(null)
-    setApiWatering(null)
-    setApiSunlight(null)
+    setWateringEstimate(7)
+    setProfileWatering(null)
+    setProfileMisting(null)
     setRoomId('__none__')
     setPotMaterial('ceramic')
     setPotSize('medium')
     setLightLevel('medium')
-    setManualMode(false)
-    setManualWatering('average')
-    setSearchQuery('')
-    setDebouncedQuery('')
-    setShowResults(false)
+    setSpeciesQuery('')
+    setDebouncedSpeciesQuery('')
+    setShowSuggestions(false)
   }
 
-  const canSubmit = nickname.trim() && (speciesName.trim() || manualMode)
+  const canSubmit = nickname.trim() && speciesName.trim()
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v) }}>
@@ -434,96 +399,79 @@ function AddPlantDialog({
         <DialogHeader>
           <DialogTitle className="text-text-primary">Add Plant</DialogTitle>
           <DialogDescription className="text-text-muted text-sm">
-            Search for a species or enter details manually.
+            Enter your plant&apos;s species and details.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
-          {/* Species search or manual toggle */}
-          <div className="flex items-center justify-between">
-            <Label className="text-text-secondary text-sm">
-              {manualMode ? 'Manual Entry' : 'Search Species'}
-            </Label>
-            <button
-              type="button"
-              onClick={() => { setManualMode(!manualMode); setShowResults(false) }}
-              className="text-xs text-plant hover:text-plant/80 transition-colors cursor-pointer"
-            >
-              {manualMode ? 'Search instead' : 'Enter manually'}
-            </button>
+          {/* Species name with autocomplete */}
+          <div ref={searchRef} className="relative">
+            <Label className="text-text-muted text-xs mb-1.5 block">Species</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim" />
+              <Input
+                value={speciesQuery}
+                onChange={(e) => {
+                  setSpeciesQuery(e.target.value)
+                  setSpeciesName(e.target.value)
+                  setProfileWatering(null)
+                  setProfileMisting(null)
+                  setShowSuggestions(true)
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                placeholder="e.g. Monstera, Pothos, Snake Plant..."
+                className="pl-9 bg-bg-elevated border-border-default text-text-primary placeholder:text-text-dim"
+              />
+            </div>
+            {showSuggestions && debouncedSpeciesQuery.length >= 2 && speciesSuggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-bg-elevated border border-border-default rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                {isSearching ? (
+                  <div className="p-3 text-center text-text-muted text-sm">Searching...</div>
+                ) : (
+                  speciesSuggestions.map((profile) => (
+                    <button
+                      key={profile.species_common_name}
+                      onClick={() => selectProfile(profile)}
+                      className="w-full text-left px-3 py-2 hover:bg-bg-secondary transition-colors flex items-center gap-2.5 cursor-pointer"
+                    >
+                      {profile.image_url ? (
+                        <img
+                          src={profile.image_url}
+                          alt=""
+                          className="w-8 h-8 rounded-md object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-md bg-plant-bg flex items-center justify-center shrink-0">
+                          <Leaf className="w-4 h-4 text-plant" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm text-text-primary truncate">{profile.species_common_name}</p>
+                        <p className="text-xs text-text-muted truncate">{profile.species_scientific_name}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
-          {!manualMode ? (
-            <div ref={searchRef} className="relative">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }}
-                  onFocus={() => setShowResults(true)}
-                  placeholder="Search for a plant species..."
-                  className="pl-9 bg-bg-elevated border-border-default text-text-primary placeholder:text-text-dim"
-                />
-              </div>
-              {showResults && debouncedQuery.length >= 2 && (
-                <div className="absolute z-10 w-full mt-1 bg-bg-elevated border border-border-default rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                  {isSearching ? (
-                    <div className="p-3 text-center text-text-muted text-sm">Searching...</div>
-                  ) : searchResults.length === 0 ? (
-                    <div className="p-3 text-center text-text-muted text-sm">
-                      No results. <button onClick={() => setManualMode(true)} className="text-plant cursor-pointer">Enter manually</button>
-                    </div>
-                  ) : (
-                    searchResults.slice(0, 8).map((result) => (
-                      <button
-                        key={result.id}
-                        onClick={() => selectSpecies(result)}
-                        className="w-full text-left px-3 py-2 hover:bg-bg-secondary transition-colors flex items-center gap-2.5 cursor-pointer"
-                      >
-                        {result.default_image?.thumbnail ? (
-                          <img
-                            src={result.default_image.thumbnail}
-                            alt=""
-                            className="w-8 h-8 rounded-md object-cover shrink-0"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-md bg-plant-bg flex items-center justify-center shrink-0">
-                            <Leaf className="w-4 h-4 text-plant" />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-sm text-text-primary truncate">{result.common_name}</p>
-                          <p className="text-xs text-text-muted truncate">{result.scientific_name?.[0]}</p>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <Input
-                value={speciesName}
-                onChange={(e) => setSpeciesName(e.target.value)}
-                placeholder="Species name (e.g. Monstera)"
-                className="bg-bg-elevated border-border-default text-text-primary placeholder:text-text-dim"
-              />
-              <div>
-                <Label className="text-text-muted text-xs mb-1.5 block">Watering Frequency</Label>
-                <Select value={manualWatering} onValueChange={(v) => setManualWatering(v as WateringFrequency)}>
-                  <SelectTrigger className="bg-bg-elevated border-border-default text-text-primary">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-bg-elevated border-border-default">
-                    {WATERING_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value} className="text-text-primary">
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          {/* Watering estimate (shown when no species profile matched) */}
+          {profileWatering === null && (
+            <div>
+              <Label className="text-text-muted text-xs mb-1.5 block">Watering Estimate</Label>
+              <Select value={String(wateringEstimate)} onValueChange={(v) => setWateringEstimate(Number(v))}>
+                <SelectTrigger className="bg-bg-elevated border-border-default text-text-primary">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-bg-elevated border-border-default">
+                  {WATERING_ESTIMATE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={String(opt.value)} className="text-text-primary">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
@@ -943,8 +891,8 @@ function PlantDetailSheet({
               disabled={uploadPhoto.isPending}
               className="relative w-12 h-12 shrink-0 cursor-pointer group"
             >
-              {plant.species_thumbnail_url ? (
-                <img src={plant.species_thumbnail_url} alt="" className="w-12 h-12 rounded-xl object-cover" />
+              {(plant.species_thumbnail_url ?? speciesProfile?.image_url) ? (
+                <img src={(plant.species_thumbnail_url ?? speciesProfile?.image_url)!} alt="" className="w-12 h-12 rounded-xl object-cover" />
               ) : (
                 <div className="w-12 h-12 rounded-xl bg-plant-bg flex items-center justify-center">
                   <Leaf className="w-6 h-6 text-plant" />
@@ -1006,7 +954,7 @@ function PlantDetailSheet({
         {/* Scrollable content */}
         <div className="overflow-y-auto flex-1 overscroll-contain">
           {/* Species research (from Claude.ai) */}
-          {speciesProfile?.care_summary && (
+          {speciesProfile?.care_summary ? (
             <div className="px-5 py-3 border-b border-border-default">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-text-dim mb-2">Research Notes</h3>
               <p className="text-sm text-text-secondary leading-relaxed">{speciesProfile.care_summary}</p>
@@ -1016,6 +964,17 @@ function PlantDetailSheet({
                   <span className="text-xs text-text-secondary">{speciesProfile.common_problems}</span>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="px-5 py-3 border-b border-border-default">
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-plant-bg/30 border border-plant/10">
+                <Sprout className="w-4 h-4 text-plant mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm text-text-secondary">
+                    No species research yet. Ask Claude to research <span className="font-medium text-text-primary">{plant.species_common_name}</span> for care tips, a reference image, and optimized schedules.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 

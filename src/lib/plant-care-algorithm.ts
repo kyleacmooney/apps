@@ -1,11 +1,4 @@
-import type { CareType, WateringFrequency, PotMaterial, PotSize, LightLevel } from './plant-types'
-
-const WATERING_BASE: Record<WateringFrequency, number> = {
-  frequent: 3,
-  average: 7,
-  minimum: 14,
-  none: 30,
-}
+import type { CareType, PotMaterial, PotSize, LightLevel } from './plant-types'
 
 const POT_MATERIAL_MULTIPLIER: Record<PotMaterial, number> = {
   terracotta: 0.75,
@@ -39,18 +32,16 @@ function getSeasonMultiplier(): number {
 }
 
 export function computeWateringInterval(
-  apiWatering: WateringFrequency | null,
+  baseIntervalDays: number,
   potMaterial: PotMaterial | null,
   potSize: PotSize | null,
   lightLevel: LightLevel | null,
-  researchOverride?: number | null,
 ): number {
-  const base = researchOverride ?? WATERING_BASE[apiWatering ?? 'average']
   const mat = POT_MATERIAL_MULTIPLIER[potMaterial ?? 'ceramic']
   const size = POT_SIZE_MULTIPLIER[potSize ?? 'medium']
   const light = LIGHT_MULTIPLIER[lightLevel ?? 'medium']
   const season = getSeasonMultiplier()
-  return Math.max(1, Math.round(base * mat * size * light * season))
+  return Math.max(1, Math.round(baseIntervalDays * mat * size * light * season))
 }
 
 interface ScheduleDefaults {
@@ -61,15 +52,14 @@ interface ScheduleDefaults {
 }
 
 export function computeDefaultSchedules(
-  apiWatering: WateringFrequency | null,
+  baseIntervalDays: number,
   potMaterial: PotMaterial | null,
   potSize: PotSize | null,
   lightLevel: LightLevel | null,
-  researchOverride?: number | null,
   fertilizeOverride?: number | null,
   mistingNeeded?: boolean | null,
 ): ScheduleDefaults[] {
-  const waterInterval = computeWateringInterval(apiWatering, potMaterial, potSize, lightLevel, researchOverride)
+  const waterInterval = computeWateringInterval(baseIntervalDays, potMaterial, potSize, lightLevel)
   const today = new Date().toISOString().split('T')[0]
 
   const addDays = (days: number): string => {
@@ -94,7 +84,7 @@ export function computeDefaultSchedules(
     {
       care_type: 'mist',
       interval_days: Math.max(1, Math.round(waterInterval * 0.5)),
-      is_enabled: mistingNeeded !== false && (apiWatering === 'frequent' || apiWatering === 'average'),
+      is_enabled: mistingNeeded !== false && baseIntervalDays <= 7,
       next_due: addDays(Math.max(1, Math.round(waterInterval * 0.5))),
     },
     {

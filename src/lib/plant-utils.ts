@@ -6,7 +6,7 @@ import {
   Sparkles,
   Scissors,
 } from 'lucide-react'
-import type { CareType, PotMaterial, PotSize, LightLevel, WateringFrequency } from './plant-types'
+import type { CareType, PotMaterial, PotSize, LightLevel } from './plant-types'
 import type { LucideIcon } from 'lucide-react'
 
 export const CARE_TYPES: CareType[] = ['water', 'fertilize', 'mist', 'repot', 'clean', 'prune']
@@ -48,11 +48,11 @@ export const LIGHT_LEVELS: { value: LightLevel; label: string }[] = [
   { value: 'full_sun', label: 'Full Sun' },
 ]
 
-export const WATERING_OPTIONS: { value: WateringFrequency; label: string }[] = [
-  { value: 'frequent', label: 'Frequent (every 2-3 days)' },
-  { value: 'average', label: 'Average (weekly)' },
-  { value: 'minimum', label: 'Minimum (every 2 weeks)' },
-  { value: 'none', label: 'Rare (monthly)' },
+export const WATERING_ESTIMATE_OPTIONS: { value: number; label: string }[] = [
+  { value: 3, label: 'Every 2-3 days (tropical)' },
+  { value: 7, label: 'Weekly (most houseplants)' },
+  { value: 14, label: 'Every 2 weeks (succulents)' },
+  { value: 30, label: 'Monthly (cacti/drought-tolerant)' },
 ]
 
 export function daysOverdue(nextDue: string): number {

@@ -3,7 +3,6 @@ export type CareStatus = 'done' | 'skipped'
 export type PotMaterial = 'terracotta' | 'plastic' | 'ceramic' | 'fabric' | 'wood' | 'other'
 export type PotSize = 'small' | 'medium' | 'large' | 'xlarge'
 export type LightLevel = 'low' | 'medium' | 'bright' | 'full_sun'
-export type WateringFrequency = 'frequent' | 'average' | 'minimum' | 'none'
 
 export interface Room {
   id: string
@@ -19,10 +18,7 @@ export interface Plant {
   nickname: string
   species_common_name: string
   species_scientific_name: string | null
-  perenual_id: number | null
   species_thumbnail_url: string | null
-  api_watering: WateringFrequency | null
-  api_sunlight: string[] | null
   pot_material: PotMaterial | null
   pot_size: PotSize | null
   light_level: LightLevel | null
@@ -60,9 +56,9 @@ export interface CareLog {
 export interface SpeciesProfile {
   id: string
   user_id: string
-  perenual_id: number | null
   species_common_name: string
   species_scientific_name: string | null
+  image_url: string | null
   watering_interval_days: number | null
   humidity_preference: 'low' | 'average' | 'high' | null
   temperature_min_f: number | null
@@ -94,14 +90,3 @@ export interface TodoItem {
   }
 }
 
-export interface PerenualSearchResult {
-  id: number
-  common_name: string
-  scientific_name: string[]
-  default_image?: {
-    thumbnail?: string
-    small_url?: string
-  }
-  watering: string
-  sunlight: string[]
-}

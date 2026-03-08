@@ -51,10 +51,13 @@ docs/
 
 ## Supabase
 
+- **Tooling:** Claude Code has access to both the Supabase MCP server and the Supabase CLI (`supabase` command via Bash)
 - Project: `claude-managed` (ID: `svmjtlsdyghxilpcdywc`)
 - Auth: Google OAuth
 - Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles` — all RLS-enabled
-- Edge Functions: `perenual-proxy` (plant species search, requires `PERENUAL_API_KEY` secret)
+- Edge Functions: `proxy-image-upload` (downloads external image URLs and self-hosts them in Supabase Storage, updating `species_profiles.image_url`)
+- Storage: `plant-photos` bucket (public read) — stores species reference images under `species/` and user-uploaded plant photos
+- `species_profiles` is the primary source of species data, populated by Claude.ai via `docs/plant-care-instructions.md`
 - **Workout logging instructions** (used in Claude.ai conversations): [`docs/workout-logging-instructions.md`](docs/workout-logging-instructions.md)
 - **Plant care instructions** (used in Claude.ai conversations): [`docs/plant-care-instructions.md`](docs/plant-care-instructions.md)
 
