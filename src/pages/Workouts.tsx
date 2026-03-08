@@ -966,7 +966,7 @@ export function Workouts() {
 
           {/* Session type filter pills — list view only */}
           {viewMode === "list" && (
-            <div>
+            <div className="select-none">
               <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
                 {allTypes.map((type) => {
                   const isActive = activeFilter === type
