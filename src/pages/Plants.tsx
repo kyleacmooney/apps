@@ -43,6 +43,8 @@ import {
   Archive,
   Leaf,
   Home,
+  Camera,
+  Loader2,
 } from 'lucide-react'
 import {
   Dialog,
@@ -749,6 +751,40 @@ function PlantDetailSheet({
   const queryClient = useQueryClient()
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null)
   const [editInterval, setEditInterval] = useState('')
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
+  const uploadPhoto = useMutation({
+    mutationFn: async (file: File) => {
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const path = `${plant!.user_id}/${plant!.id}.${ext}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('plant-photos')
+        .upload(path, file, { upsert: true })
+      if (uploadError) throw uploadError
+
+      const { data: urlData } = supabase.storage
+        .from('plant-photos')
+        .getPublicUrl(path)
+
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`
+
+      const { error: updateError } = await supabase
+        .from('plants')
+        .update({ species_thumbnail_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', plant!.id)
+      if (updateError) throw updateError
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants'] })
+    },
+  })
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) uploadPhoto.mutate(file)
+    e.target.value = ''
+  }
 
   const updateRoom = useMutation({
     mutationFn: async (roomId: string | null) => {
@@ -872,13 +908,33 @@ function PlantDetailSheet({
         {/* Header */}
         <div className="px-5 pb-3 border-b border-border-default">
           <div className="flex items-center gap-3">
-            {plant.species_thumbnail_url ? (
-              <img src={plant.species_thumbnail_url} alt="" className="w-12 h-12 rounded-xl object-cover" />
-            ) : (
-              <div className="w-12 h-12 rounded-xl bg-plant-bg flex items-center justify-center">
-                <Leaf className="w-6 h-6 text-plant" />
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoSelect}
+            />
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadPhoto.isPending}
+              className="relative w-12 h-12 shrink-0 cursor-pointer group"
+            >
+              {plant.species_thumbnail_url ? (
+                <img src={plant.species_thumbnail_url} alt="" className="w-12 h-12 rounded-xl object-cover" />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-plant-bg flex items-center justify-center">
+                  <Leaf className="w-6 h-6 text-plant" />
+                </div>
+              )}
+              <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                {uploadPhoto.isPending ? (
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                ) : (
+                  <Camera className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
               </div>
-            )}
+            </button>
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-semibold text-text-primary truncate">{plant.nickname}</h2>
               <p className="text-sm text-text-muted truncate">{plant.species_common_name}</p>
