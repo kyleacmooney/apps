@@ -99,9 +99,7 @@ async function searchPerenual(query: string): Promise<PerenualSearchResult[]> {
     body: { action: 'search', q: query },
   })
   if (error) return []
-  return ((data as Record<string, unknown>)?.data as PerenualSearchResult[] ?? []).filter(
-    (s: PerenualSearchResult) => s.id <= 3000, // free tier
-  )
+  return (data as Record<string, unknown>)?.data as PerenualSearchResult[] ?? []
 }
 
 async function fetchPerenualDetails(id: number): Promise<Record<string, unknown> | null> {
@@ -321,12 +319,14 @@ function AddPlantDialog({
     setSearchQuery(result.common_name)
     setShowResults(false)
 
-    // Fetch details for more accurate watering data
-    fetchPerenualDetails(result.id).then((details) => {
-      if (details?.watering) {
-        setApiWatering((details.watering as string).toLowerCase() as WateringFrequency)
-      }
-    })
+    // Fetch details for more accurate watering data (free tier: species 1-3000)
+    if (result.id <= 3000) {
+      fetchPerenualDetails(result.id).then((details) => {
+        if (details?.watering) {
+          setApiWatering((details.watering as string).toLowerCase() as WateringFrequency)
+        }
+      })
+    }
   }
 
   const createPlant = useMutation({
