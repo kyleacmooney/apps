@@ -1,0 +1,1508 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
+import { cn } from '@/lib/utils'
+import { computeDefaultSchedules } from '@/lib/plant-care-algorithm'
+import {
+  CARE_TYPE_CONFIG,
+  POT_MATERIALS,
+  POT_SIZES,
+  LIGHT_LEVELS,
+  WATERING_OPTIONS,
+  daysOverdue,
+  formatDueDate,
+  pluralizeDays,
+} from '@/lib/plant-utils'
+import type {
+  Plant,
+  Room,
+  CareSchedule,
+  CareLog,
+  CareType,
+  TodoItem,
+  PerenualSearchResult,
+  PotMaterial,
+  PotSize,
+  LightLevel,
+  WateringFrequency,
+  SpeciesProfile,
+} from '@/lib/plant-types'
+import {
+  ArrowLeft,
+  Plus,
+  RefreshCw,
+  Check,
+  SkipForward,
+  Sprout,
+  ChevronRight,
+  X,
+  Search,
+  Pencil,
+  Archive,
+  Leaf,
+  Home,
+} from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Separator } from '@/components/ui/separator'
+
+// ─── Query select strings ──────────────────────────────────────
+
+const TODO_SELECT = `
+  id, care_type, next_due, interval_days, is_custom,
+  plants!inner (
+    id, nickname, species_common_name, species_thumbnail_url, is_archived,
+    rooms ( name )
+  )
+`
+
+const PLANT_SELECT = `
+  id, user_id, room_id, nickname, species_common_name, species_scientific_name,
+  perenual_id, species_thumbnail_url, api_watering, api_sunlight,
+  pot_material, pot_size, light_level, notes, is_archived, created_at, updated_at,
+  rooms ( id, name )
+`
+
+// ─── Helpers ──────────────────────────────────────
+
+function todayStr(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+function addDaysStr(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+// ─── Species Search (Perenual edge function) ──────────────────
+
+async function searchPerenual(
+  query: string,
+  accessToken: string,
+): Promise<PerenualSearchResult[]> {
+  const res = await fetch(
+    `${SUPABASE_URL}/functions/v1/perenual-proxy?action=search&q=${encodeURIComponent(query)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+    },
+  )
+  if (!res.ok) return []
+  const json = await res.json()
+  return (json.data ?? []).filter(
+    (s: PerenualSearchResult) => s.id <= 3000, // free tier
+  )
+}
+
+async function fetchPerenualDetails(
+  id: number,
+  accessToken: string,
+): Promise<Record<string, unknown> | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/functions/v1/perenual-proxy?action=details&id=${id}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+    },
+  )
+  if (!res.ok) return null
+  return res.json()
+}
+
+// ─── Sub-components ──────────────────────────────────────
+
+function TodoCard({
+  item,
+  onDone,
+  onSkip,
+  isPending,
+}: {
+  item: TodoItem
+  onDone: () => void
+  onSkip: () => void
+  isPending: boolean
+}) {
+  const config = CARE_TYPE_CONFIG[item.care_type]
+  const Icon = config.icon
+  const overdue = daysOverdue(item.next_due)
+
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-3 p-3 rounded-xl bg-bg-secondary border border-border-default transition-all duration-200',
+        isPending && 'opacity-50 scale-[0.98]',
+      )}
+    >
+      <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0', config.bgColor)}>
+        <Icon className={cn('w-4.5 h-4.5', config.color)} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-text-primary truncate">
+            {item.plants.nickname}
+          </span>
+          {item.plants.rooms && (
+            <span className="text-xs text-text-dim truncate">
+              {item.plants.rooms.name}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className={cn('text-xs font-medium', config.color)}>{config.label}</span>
+          <span
+            className={cn(
+              'text-xs font-mono',
+              overdue > 0 ? 'text-red-400' : 'text-text-muted',
+            )}
+          >
+            {formatDueDate(item.next_due)}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          onClick={onSkip}
+          disabled={isPending}
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-text-dim hover:text-text-muted hover:bg-bg-elevated transition-colors cursor-pointer"
+          title="Skip"
+        >
+          <SkipForward className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onDone}
+          disabled={isPending}
+          className="w-8 h-8 rounded-lg flex items-center justify-center bg-plant/15 text-plant hover:bg-plant/25 transition-colors cursor-pointer"
+          title="Done"
+        >
+          <Check className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PlantCard({
+  plant,
+  onClick,
+}: {
+  plant: Plant
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left p-3 rounded-xl bg-bg-secondary border border-border-default hover:border-border-hover transition-all duration-200 cursor-pointer"
+    >
+      <div className="flex items-center gap-3">
+        {plant.species_thumbnail_url ? (
+          <img
+            src={plant.species_thumbnail_url}
+            alt=""
+            className="w-10 h-10 rounded-lg object-cover shrink-0"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-plant-bg flex items-center justify-center shrink-0">
+            <Leaf className="w-5 h-5 text-plant" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-text-primary truncate">
+            {plant.nickname}
+          </p>
+          <p className="text-xs text-text-muted truncate">
+            {plant.species_common_name}
+          </p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-text-dim shrink-0" />
+      </div>
+    </button>
+  )
+}
+
+function RoomSection({
+  room,
+  plants,
+  onPlantClick,
+  onEditRoom,
+}: {
+  room: Room | null
+  plants: Plant[]
+  onPlantClick: (plant: Plant) => void
+  onEditRoom?: () => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <Home className="w-3.5 h-3.5 text-text-dim" />
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-text-dim">
+            {room?.name ?? 'No Room'}
+          </h3>
+        </div>
+        {room && onEditRoom && (
+          <button
+            onClick={onEditRoom}
+            className="text-text-dim hover:text-text-muted transition-colors cursor-pointer"
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-2">
+        {plants.map((plant) => (
+          <PlantCard key={plant.id} plant={plant} onClick={() => onPlantClick(plant)} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Add Plant Dialog ──────────────────────────────────────
+
+function AddPlantDialog({
+  open,
+  onOpenChange,
+  rooms,
+  userId,
+  onSuccess,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  rooms: Room[]
+  userId: string
+  onSuccess: () => void
+}) {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+
+  // Form state
+  const [nickname, setNickname] = useState('')
+  const [speciesName, setSpeciesName] = useState('')
+  const [scientificName, setScientificName] = useState('')
+  const [perenualId, setPerenualId] = useState<number | null>(null)
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
+  const [apiWatering, setApiWatering] = useState<WateringFrequency | null>(null)
+  const [apiSunlight, setApiSunlight] = useState<string[] | null>(null)
+  const [roomId, setRoomId] = useState('__none__')
+  const [potMaterial, setPotMaterial] = useState<PotMaterial>('ceramic')
+  const [potSize, setPotSize] = useState<PotSize>('medium')
+  const [lightLevel, setLightLevel] = useState<LightLevel>('medium')
+  const [manualMode, setManualMode] = useState(false)
+  const [manualWatering, setManualWatering] = useState<WateringFrequency>('average')
+
+  // Species search
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [showResults, setShowResults] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  const { data: searchResults = [], isFetching: isSearching } = useQuery({
+    queryKey: ['perenual', 'search', debouncedQuery],
+    queryFn: () => searchPerenual(debouncedQuery, session?.access_token ?? ''),
+    enabled: debouncedQuery.length >= 2 && !manualMode && !!session?.access_token,
+    staleTime: 60_000,
+  })
+
+  function selectSpecies(result: PerenualSearchResult) {
+    setSpeciesName(result.common_name)
+    setScientificName(result.scientific_name?.[0] ?? '')
+    setPerenualId(result.id)
+    setThumbnailUrl(result.default_image?.thumbnail ?? result.default_image?.small_url ?? null)
+    setApiWatering((result.watering?.toLowerCase() as WateringFrequency) ?? null)
+    setApiSunlight(result.sunlight ?? null)
+    if (!nickname) setNickname(result.common_name)
+    setSearchQuery(result.common_name)
+    setShowResults(false)
+
+    // Fetch details for more accurate watering data
+    if (session?.access_token) {
+      fetchPerenualDetails(result.id, session.access_token).then((details) => {
+        if (details?.watering) {
+          setApiWatering((details.watering as string).toLowerCase() as WateringFrequency)
+        }
+      })
+    }
+  }
+
+  const createPlant = useMutation({
+    mutationFn: async () => {
+      const watering = manualMode ? manualWatering : apiWatering
+
+      const { data: plant, error } = await supabase
+        .from('plants')
+        .insert({
+          user_id: userId,
+          room_id: roomId === '__none__' ? null : roomId,
+          nickname: nickname.trim(),
+          species_common_name: speciesName.trim() || nickname.trim(),
+          species_scientific_name: scientificName || null,
+          perenual_id: perenualId,
+          species_thumbnail_url: thumbnailUrl,
+          api_watering: watering,
+          api_sunlight: apiSunlight,
+          pot_material: potMaterial,
+          pot_size: potSize,
+          light_level: lightLevel,
+        })
+        .select()
+        .single()
+      if (error) throw error
+
+      const schedules = computeDefaultSchedules(watering, potMaterial, potSize, lightLevel)
+      const { error: schedError } = await supabase
+        .from('care_schedules')
+        .insert(
+          schedules.map((s) => ({
+            user_id: userId,
+            plant_id: plant.id,
+            care_type: s.care_type,
+            interval_days: s.interval_days,
+            is_enabled: s.is_enabled,
+            next_due: s.next_due,
+          })),
+        )
+      if (schedError) throw schedError
+      return plant
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants'] })
+      queryClient.invalidateQueries({ queryKey: ['rooms'] })
+      resetForm()
+      onOpenChange(false)
+      onSuccess()
+    },
+  })
+
+  function resetForm() {
+    setNickname('')
+    setSpeciesName('')
+    setScientificName('')
+    setPerenualId(null)
+    setThumbnailUrl(null)
+    setApiWatering(null)
+    setApiSunlight(null)
+    setRoomId('__none__')
+    setPotMaterial('ceramic')
+    setPotSize('medium')
+    setLightLevel('medium')
+    setManualMode(false)
+    setManualWatering('average')
+    setSearchQuery('')
+    setDebouncedQuery('')
+    setShowResults(false)
+  }
+
+  const canSubmit = nickname.trim() && (speciesName.trim() || manualMode)
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v) }}>
+      <DialogContent className="bg-bg-secondary border-border-default text-text-primary max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-text-primary">Add Plant</DialogTitle>
+          <DialogDescription className="text-text-muted text-sm">
+            Search for a species or enter details manually.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-2">
+          {/* Species search or manual toggle */}
+          <div className="flex items-center justify-between">
+            <Label className="text-text-secondary text-sm">
+              {manualMode ? 'Manual Entry' : 'Search Species'}
+            </Label>
+            <button
+              type="button"
+              onClick={() => { setManualMode(!manualMode); setShowResults(false) }}
+              className="text-xs text-plant hover:text-plant/80 transition-colors cursor-pointer"
+            >
+              {manualMode ? 'Search instead' : 'Enter manually'}
+            </button>
+          </div>
+
+          {!manualMode ? (
+            <div ref={searchRef} className="relative">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }}
+                  onFocus={() => setShowResults(true)}
+                  placeholder="Search for a plant species..."
+                  className="pl-9 bg-bg-elevated border-border-default text-text-primary placeholder:text-text-dim"
+                />
+              </div>
+              {showResults && debouncedQuery.length >= 2 && (
+                <div className="absolute z-10 w-full mt-1 bg-bg-elevated border border-border-default rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                  {isSearching ? (
+                    <div className="p-3 text-center text-text-muted text-sm">Searching...</div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="p-3 text-center text-text-muted text-sm">
+                      No results. <button onClick={() => setManualMode(true)} className="text-plant cursor-pointer">Enter manually</button>
+                    </div>
+                  ) : (
+                    searchResults.slice(0, 8).map((result) => (
+                      <button
+                        key={result.id}
+                        onClick={() => selectSpecies(result)}
+                        className="w-full text-left px-3 py-2 hover:bg-bg-secondary transition-colors flex items-center gap-2.5 cursor-pointer"
+                      >
+                        {result.default_image?.thumbnail ? (
+                          <img
+                            src={result.default_image.thumbnail}
+                            alt=""
+                            className="w-8 h-8 rounded-md object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-md bg-plant-bg flex items-center justify-center shrink-0">
+                            <Leaf className="w-4 h-4 text-plant" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm text-text-primary truncate">{result.common_name}</p>
+                          <p className="text-xs text-text-muted truncate">{result.scientific_name?.[0]}</p>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Input
+                value={speciesName}
+                onChange={(e) => setSpeciesName(e.target.value)}
+                placeholder="Species name (e.g. Monstera)"
+                className="bg-bg-elevated border-border-default text-text-primary placeholder:text-text-dim"
+              />
+              <div>
+                <Label className="text-text-muted text-xs mb-1.5 block">Watering Frequency</Label>
+                <Select value={manualWatering} onValueChange={(v) => setManualWatering(v as WateringFrequency)}>
+                  <SelectTrigger className="bg-bg-elevated border-border-default text-text-primary">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-bg-elevated border-border-default">
+                    {WATERING_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} className="text-text-primary">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <Separator className="bg-border-default" />
+
+          {/* Nickname */}
+          <div>
+            <Label className="text-text-muted text-xs mb-1.5 block">Nickname</Label>
+            <Input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder="Give your plant a name"
+              className="bg-bg-elevated border-border-default text-text-primary placeholder:text-text-dim"
+            />
+          </div>
+
+          {/* Room */}
+          <div>
+            <Label className="text-text-muted text-xs mb-1.5 block">Room</Label>
+            <Select value={roomId} onValueChange={setRoomId}>
+              <SelectTrigger className="bg-bg-elevated border-border-default text-text-primary">
+                <SelectValue placeholder="Select room (optional)" />
+              </SelectTrigger>
+              <SelectContent className="bg-bg-elevated border-border-default">
+                <SelectItem value="__none__" className="text-text-muted">No room</SelectItem>
+                {rooms.map((room) => (
+                  <SelectItem key={room.id} value={room.id} className="text-text-primary">
+                    {room.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Pot info */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-text-muted text-xs mb-1.5 block">Pot Material</Label>
+              <Select value={potMaterial} onValueChange={(v) => setPotMaterial(v as PotMaterial)}>
+                <SelectTrigger className="bg-bg-elevated border-border-default text-text-primary">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-bg-elevated border-border-default">
+                  {POT_MATERIALS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} className="text-text-primary">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-text-muted text-xs mb-1.5 block">Pot Size</Label>
+              <Select value={potSize} onValueChange={(v) => setPotSize(v as PotSize)}>
+                <SelectTrigger className="bg-bg-elevated border-border-default text-text-primary">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-bg-elevated border-border-default">
+                  {POT_SIZES.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} className="text-text-primary">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Light level */}
+          <div>
+            <Label className="text-text-muted text-xs mb-1.5 block">Light Level</Label>
+            <Select value={lightLevel} onValueChange={(v) => setLightLevel(v as LightLevel)}>
+              <SelectTrigger className="bg-bg-elevated border-border-default text-text-primary">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-bg-elevated border-border-default">
+                {LIGHT_LEVELS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="text-text-primary">
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Submit */}
+          <button
+            onClick={() => createPlant.mutate()}
+            disabled={!canSubmit || createPlant.isPending}
+            className={cn(
+              'w-full py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer',
+              canSubmit
+                ? 'bg-plant text-bg-primary hover:bg-plant/90'
+                : 'bg-bg-elevated text-text-dim cursor-not-allowed',
+            )}
+          >
+            {createPlant.isPending ? 'Adding...' : 'Add Plant'}
+          </button>
+
+          {createPlant.isError && (
+            <p className="text-red-400 text-xs text-center">
+              Failed to add plant. Please try again.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Room Dialog ──────────────────────────────────────
+
+function RoomDialog({
+  open,
+  onOpenChange,
+  room,
+  userId,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  room: Room | null
+  userId: string
+}) {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState(room?.name ?? '')
+
+  useEffect(() => {
+    setName(room?.name ?? '')
+  }, [room])
+
+  const upsertRoom = useMutation({
+    mutationFn: async () => {
+      if (room) {
+        const { error } = await supabase
+          .from('rooms')
+          .update({ name: name.trim() })
+          .eq('id', room.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('rooms')
+          .insert({ user_id: userId, name: name.trim() })
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rooms'] })
+      queryClient.invalidateQueries({ queryKey: ['plants'] })
+      onOpenChange(false)
+    },
+  })
+
+  const deleteRoom = useMutation({
+    mutationFn: async () => {
+      if (!room) return
+      const { error } = await supabase.from('rooms').delete().eq('id', room.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rooms'] })
+      queryClient.invalidateQueries({ queryKey: ['plants'] })
+      onOpenChange(false)
+    },
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-bg-secondary border-border-default text-text-primary max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-text-primary">
+            {room ? 'Edit Room' : 'Add Room'}
+          </DialogTitle>
+          <DialogDescription className="text-text-muted text-sm">
+            {room ? 'Rename or delete this room.' : 'Create a room to organize your plants.'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Room name"
+            className="bg-bg-elevated border-border-default text-text-primary placeholder:text-text-dim"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            {room && (
+              <button
+                onClick={() => deleteRoom.mutate()}
+                className="px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer"
+              >
+                Delete
+              </button>
+            )}
+            <div className="flex-1" />
+            <button
+              onClick={() => onOpenChange(false)}
+              className="px-4 py-2 rounded-lg text-sm text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => upsertRoom.mutate()}
+              disabled={!name.trim() || upsertRoom.isPending}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-plant text-bg-primary hover:bg-plant/90 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {room ? 'Save' : 'Add'}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Plant Detail Bottom Sheet ──────────────────────────────────
+
+function PlantDetailSheet({
+  plant,
+  visible,
+  onClose,
+}: {
+  plant: Plant | null
+  visible: boolean
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [editingSchedule, setEditingSchedule] = useState<string | null>(null)
+  const [editInterval, setEditInterval] = useState('')
+
+  const { data: schedules = [] } = useQuery({
+    queryKey: ['plants', 'care-schedules', plant?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('care_schedules')
+        .select('*')
+        .eq('plant_id', plant!.id)
+        .order('care_type')
+      return (data ?? []) as CareSchedule[]
+    },
+    enabled: !!plant,
+  })
+
+  const { data: logs = [] } = useQuery({
+    queryKey: ['plants', 'care-logs', plant?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('care_logs')
+        .select('*')
+        .eq('plant_id', plant!.id)
+        .order('performed_at', { ascending: false })
+        .limit(20)
+      return (data ?? []) as CareLog[]
+    },
+    enabled: !!plant,
+  })
+
+  const { data: speciesProfile } = useQuery({
+    queryKey: ['species-profiles', plant?.species_common_name],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('species_profiles')
+        .select('*')
+        .eq('species_common_name', plant!.species_common_name)
+        .maybeSingle()
+      return data as SpeciesProfile | null
+    },
+    enabled: !!plant,
+  })
+
+  const toggleEnabled = useMutation({
+    mutationFn: async ({ scheduleId, enabled }: { scheduleId: string; enabled: boolean }) => {
+      await supabase
+        .from('care_schedules')
+        .update({ is_enabled: enabled, updated_at: new Date().toISOString() })
+        .eq('id', scheduleId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-schedules', plant?.id] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'todo'] })
+    },
+  })
+
+  const updateInterval = useMutation({
+    mutationFn: async ({ scheduleId, days }: { scheduleId: string; days: number }) => {
+      await supabase
+        .from('care_schedules')
+        .update({
+          interval_days: days,
+          is_custom: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', scheduleId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-schedules', plant?.id] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'todo'] })
+      setEditingSchedule(null)
+    },
+  })
+
+  const archivePlant = useMutation({
+    mutationFn: async () => {
+      await supabase
+        .from('plants')
+        .update({ is_archived: true, updated_at: new Date().toISOString() })
+        .eq('id', plant!.id)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants'] })
+      onClose()
+    },
+  })
+
+  if (!plant) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <div
+        className={cn(
+          'absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300',
+          visible ? 'opacity-100' : 'opacity-0',
+        )}
+        onClick={onClose}
+      />
+      <div
+        className={cn(
+          'relative w-full max-w-lg bg-bg-secondary rounded-t-2xl border-t border-x border-border-default max-h-[80vh] flex flex-col transition-transform duration-300 ease-out',
+          visible ? 'translate-y-0' : 'translate-y-full',
+        )}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1 rounded-full bg-text-dim/30" />
+        </div>
+
+        {/* Header */}
+        <div className="px-5 pb-3 border-b border-border-default">
+          <div className="flex items-center gap-3">
+            {plant.species_thumbnail_url ? (
+              <img src={plant.species_thumbnail_url} alt="" className="w-12 h-12 rounded-xl object-cover" />
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-plant-bg flex items-center justify-center">
+                <Leaf className="w-6 h-6 text-plant" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-semibold text-text-primary truncate">{plant.nickname}</h2>
+              <p className="text-sm text-text-muted truncate">{plant.species_common_name}</p>
+            </div>
+            <button onClick={onClose} className="text-text-dim hover:text-text-muted transition-colors cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {/* Plant info chips */}
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {plant.rooms && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted">
+                {(plant.rooms as Room).name}
+              </span>
+            )}
+            {plant.pot_material && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted capitalize">
+                {plant.pot_material}
+              </span>
+            )}
+            {plant.pot_size && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted capitalize">
+                {plant.pot_size}
+              </span>
+            )}
+            {plant.light_level && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted">
+                {plant.light_level.replace('_', ' ')}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex-1 overscroll-contain">
+          {/* Species research (from Claude.ai) */}
+          {speciesProfile?.care_summary && (
+            <div className="px-5 py-3 border-b border-border-default">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-text-dim mb-2">Research Notes</h3>
+              <p className="text-sm text-text-secondary leading-relaxed">{speciesProfile.care_summary}</p>
+              {speciesProfile.common_problems && (
+                <div className="mt-2">
+                  <span className="text-xs font-medium text-text-muted">Common Problems: </span>
+                  <span className="text-xs text-text-secondary">{speciesProfile.common_problems}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Care schedules */}
+          <div className="px-5 py-3 border-b border-border-default">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-text-dim mb-2">Care Schedule</h3>
+            <div className="space-y-2">
+              {schedules.map((schedule) => {
+                const config = CARE_TYPE_CONFIG[schedule.care_type]
+                const Icon = config.icon
+                const isEditing = editingSchedule === schedule.id
+                return (
+                  <div key={schedule.id} className="flex items-center gap-3 py-1.5">
+                    <div className={cn('w-7 h-7 rounded-md flex items-center justify-center', config.bgColor)}>
+                      <Icon className={cn('w-3.5 h-3.5', config.color)} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-text-primary">{config.label}</span>
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-xs text-text-muted">Every</span>
+                          <input
+                            type="number"
+                            value={editInterval}
+                            onChange={(e) => setEditInterval(e.target.value)}
+                            className="w-14 px-1.5 py-0.5 text-xs bg-bg-elevated border border-border-default rounded text-text-primary text-center"
+                            min={1}
+                            autoFocus
+                          />
+                          <span className="text-xs text-text-muted">days</span>
+                          <button
+                            onClick={() => {
+                              const days = parseInt(editInterval)
+                              if (days >= 1) updateInterval.mutate({ scheduleId: schedule.id, days })
+                            }}
+                            className="text-plant text-xs font-medium cursor-pointer ml-1"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingSchedule(null)}
+                            className="text-text-dim text-xs cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingSchedule(schedule.id)
+                            setEditInterval(String(schedule.interval_days))
+                          }}
+                          className="text-xs text-text-muted hover:text-text-secondary transition-colors cursor-pointer block"
+                        >
+                          {pluralizeDays(schedule.interval_days)}
+                          {schedule.is_custom && ' (custom)'}
+                          {' · '}
+                          {formatDueDate(schedule.next_due)}
+                        </button>
+                      )}
+                    </div>
+                    <Switch
+                      checked={schedule.is_enabled}
+                      onCheckedChange={(checked) =>
+                        toggleEnabled.mutate({ scheduleId: schedule.id, enabled: checked })
+                      }
+                      className="data-[state=checked]:bg-plant"
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Care history */}
+          <div className="px-5 py-3 border-b border-border-default">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-text-dim mb-2">Recent History</h3>
+            {logs.length === 0 ? (
+              <p className="text-sm text-text-dim">No care logged yet</p>
+            ) : (
+              <div className="space-y-1.5">
+                {logs.map((log) => {
+                  const config = CARE_TYPE_CONFIG[log.care_type]
+                  const Icon = config.icon
+                  const date = new Date(log.performed_at)
+                  return (
+                    <div key={log.id} className="flex items-center gap-2.5 py-1">
+                      <Icon className={cn('w-3.5 h-3.5 shrink-0', config.color)} />
+                      <span className="text-xs text-text-secondary flex-1">
+                        {config.label}
+                        {log.status === 'skipped' && (
+                          <span className="text-text-dim ml-1">(skipped)</span>
+                        )}
+                      </span>
+                      <span className="text-xs font-mono text-text-dim">
+                        {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="px-5 py-4">
+            <button
+              onClick={() => archivePlant.mutate()}
+              disabled={archivePlant.isPending}
+              className="flex items-center gap-2 text-sm text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+            >
+              <Archive className="w-4 h-4" />
+              Archive Plant
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Plants Component ──────────────────────────────────
+
+export function Plants() {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const userId = user?.id ?? ''
+
+  // UI state
+  const [activeTab, setActiveTab] = useState('todo')
+  const [addPlantOpen, setAddPlantOpen] = useState(false)
+  const [roomDialogOpen, setRoomDialogOpen] = useState(false)
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // Plant detail sheet state (mount/unmount animation)
+  const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null)
+  const [sheetMountedId, setSheetMountedId] = useState<string | null>(null)
+  const [sheetVisible, setSheetVisible] = useState(false)
+  const sheetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // Optimistic: track items being marked done/skipped
+  const [pendingCareIds, setPendingCareIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    clearTimeout(sheetTimerRef.current)
+    if (selectedPlantId) {
+      setSheetMountedId(selectedPlantId)
+      requestAnimationFrame(() => requestAnimationFrame(() => setSheetVisible(true)))
+    } else {
+      setSheetVisible(false)
+      sheetTimerRef.current = setTimeout(() => setSheetMountedId(null), 300)
+    }
+  }, [selectedPlantId])
+
+  useEffect(() => {
+    if (sheetMountedId) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [sheetMountedId])
+
+  const closeSheet = useCallback(() => setSelectedPlantId(null), [])
+
+  // ─── Queries ──────────────────────────────────────
+
+  const { data: todoItems = [], isLoading: todoLoading } = useQuery({
+    queryKey: ['plants', 'todo'],
+    queryFn: async () => {
+      const cutoff = addDaysStr(3)
+      const { data, error } = await supabase
+        .from('care_schedules')
+        .select(TODO_SELECT)
+        .lte('next_due', cutoff)
+        .eq('is_enabled', true)
+        .order('next_due', { ascending: true })
+
+      if (error) throw error
+      // Filter out archived plants — cast through unknown since Supabase
+      // returns untyped data without generated DB types
+      return ((data ?? []) as unknown as TodoItem[]).filter((item) => !item.plants.is_archived)
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: plants = [], isLoading: plantsLoading } = useQuery({
+    queryKey: ['plants', 'list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('plants')
+        .select(PLANT_SELECT)
+        .eq('is_archived', false)
+        .order('nickname')
+      if (error) throw error
+      return (data ?? []) as unknown as Plant[]
+    },
+  })
+
+  const { data: rooms = [] } = useQuery({
+    queryKey: ['rooms', 'list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('rooms')
+        .select('*')
+        .order('name')
+      if (error) throw error
+      return (data ?? []) as Room[]
+    },
+  })
+
+  // ─── Mutations ──────────────────────────────────────
+
+  const logCare = useMutation({
+    mutationFn: async ({
+      scheduleId,
+      plantId,
+      careType,
+      status,
+    }: {
+      scheduleId: string
+      plantId: string
+      careType: CareType
+      status: 'done' | 'skipped'
+    }) => {
+      // Insert log
+      const { error: logErr } = await supabase.from('care_logs').insert({
+        user_id: userId,
+        plant_id: plantId,
+        care_type: careType,
+        status,
+      })
+      if (logErr) throw logErr
+
+      // Get interval
+      const { data: schedule } = await supabase
+        .from('care_schedules')
+        .select('interval_days')
+        .eq('id', scheduleId)
+        .single()
+
+      const intervalDays = schedule?.interval_days ?? 7
+      const nextDue = new Date()
+      nextDue.setDate(nextDue.getDate() + intervalDays)
+
+      // Update next_due
+      const { error: updateErr } = await supabase
+        .from('care_schedules')
+        .update({
+          next_due: nextDue.toISOString().split('T')[0],
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', scheduleId)
+      if (updateErr) throw updateErr
+    },
+    onMutate: ({ scheduleId }) => {
+      setPendingCareIds((prev) => new Set(prev).add(scheduleId))
+    },
+    onSettled: (_data, _err, { scheduleId }) => {
+      setPendingCareIds((prev) => {
+        const next = new Set(prev)
+        next.delete(scheduleId)
+        return next
+      })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'todo'] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-logs'] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-schedules'] })
+    },
+  })
+
+  // ─── Derived data ──────────────────────────────────────
+
+  const today = todayStr()
+
+  const todoGrouped = useMemo(() => {
+    const overdue: TodoItem[] = []
+    const dueToday: TodoItem[] = []
+    const upcoming: TodoItem[] = []
+    for (const item of todoItems) {
+      if (item.next_due < today) overdue.push(item)
+      else if (item.next_due === today) dueToday.push(item)
+      else upcoming.push(item)
+    }
+    return { overdue, dueToday, upcoming }
+  }, [todoItems, today])
+
+  const plantsByRoom = useMemo(() => {
+    const grouped = new Map<string | null, Plant[]>()
+    for (const plant of plants) {
+      const key = plant.room_id
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key)!.push(plant)
+    }
+    return grouped
+  }, [plants])
+
+  const selectedPlant = useMemo(
+    () => plants.find((p) => p.id === sheetMountedId) ?? null,
+    [plants, sheetMountedId],
+  )
+
+  async function handleRefresh() {
+    setIsRefreshing(true)
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['plants'] }),
+      queryClient.invalidateQueries({ queryKey: ['rooms'] }),
+    ])
+    setIsRefreshing(false)
+  }
+
+  // ─── Loading state ──────────────────────────────────
+
+  const isLoading = activeTab === 'todo' ? todoLoading : plantsLoading
+
+  if (isLoading && !todoItems.length && !plants.length) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-border-default border-t-plant rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  // ─── Render ──────────────────────────────────
+
+  return (
+    <div className="min-h-screen bg-bg-primary select-none">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-10 border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
+        <div className="max-w-2xl mx-auto px-5 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link
+                to="/"
+                className="text-text-dim hover:text-text-muted transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div className="flex items-center gap-2">
+                <Sprout className="w-5 h-5 text-plant" />
+                <h1 className="text-lg font-semibold text-text-primary">Plants</h1>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleRefresh}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors cursor-pointer"
+              >
+                <RefreshCw
+                  className={cn('w-4 h-4', isRefreshing && 'animate-spin')}
+                />
+              </button>
+              <button
+                onClick={() => setAddPlantOpen(true)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-plant/15 text-plant hover:bg-plant/25 transition-colors cursor-pointer"
+              >
+                <Plus className="w-4.5 h-4.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mt-3 bg-bg-elevated rounded-lg p-1">
+            <button
+              onClick={() => setActiveTab('todo')}
+              className={cn(
+                'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
+                activeTab === 'todo'
+                  ? 'bg-bg-secondary text-text-primary shadow-sm'
+                  : 'text-text-dim hover:text-text-muted',
+              )}
+            >
+              To-Do
+              {todoGrouped.overdue.length + todoGrouped.dueToday.length > 0 && (
+                <span className="ml-1.5 text-xs font-mono bg-plant/20 text-plant px-1.5 py-0.5 rounded-full">
+                  {todoGrouped.overdue.length + todoGrouped.dueToday.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('my-plants')}
+              className={cn(
+                'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
+                activeTab === 'my-plants'
+                  ? 'bg-bg-secondary text-text-primary shadow-sm'
+                  : 'text-text-dim hover:text-text-muted',
+              )}
+            >
+              My Plants
+              {plants.length > 0 && (
+                <span className="ml-1.5 text-xs font-mono text-text-dim">
+                  {plants.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-2xl mx-auto px-5 py-4 pb-10">
+        {activeTab === 'todo' && (
+          <div className="space-y-5">
+            {todoItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-plant-bg flex items-center justify-center mb-4">
+                  <Sprout className="w-8 h-8 text-plant" />
+                </div>
+                <p className="text-text-muted text-sm font-medium mb-1">All caught up!</p>
+                <p className="text-text-dim text-xs">
+                  {plants.length === 0
+                    ? 'Add your first plant to get started'
+                    : 'No care tasks due in the next 3 days'}
+                </p>
+              </div>
+            ) : (
+              <>
+                {todoGrouped.overdue.length > 0 && (
+                  <div className="space-y-2">
+                    <h2 className="text-xs font-semibold uppercase tracking-wider text-red-400 px-1">
+                      Overdue ({todoGrouped.overdue.length})
+                    </h2>
+                    {todoGrouped.overdue.map((item) => (
+                      <TodoCard
+                        key={item.id}
+                        item={item}
+                        isPending={pendingCareIds.has(item.id)}
+                        onDone={() =>
+                          logCare.mutate({
+                            scheduleId: item.id,
+                            plantId: item.plants.id,
+                            careType: item.care_type,
+                            status: 'done',
+                          })
+                        }
+                        onSkip={() =>
+                          logCare.mutate({
+                            scheduleId: item.id,
+                            plantId: item.plants.id,
+                            careType: item.care_type,
+                            status: 'skipped',
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+                {todoGrouped.dueToday.length > 0 && (
+                  <div className="space-y-2">
+                    <h2 className="text-xs font-semibold uppercase tracking-wider text-plant px-1">
+                      Today ({todoGrouped.dueToday.length})
+                    </h2>
+                    {todoGrouped.dueToday.map((item) => (
+                      <TodoCard
+                        key={item.id}
+                        item={item}
+                        isPending={pendingCareIds.has(item.id)}
+                        onDone={() =>
+                          logCare.mutate({
+                            scheduleId: item.id,
+                            plantId: item.plants.id,
+                            careType: item.care_type,
+                            status: 'done',
+                          })
+                        }
+                        onSkip={() =>
+                          logCare.mutate({
+                            scheduleId: item.id,
+                            plantId: item.plants.id,
+                            careType: item.care_type,
+                            status: 'skipped',
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+                {todoGrouped.upcoming.length > 0 && (
+                  <div className="space-y-2">
+                    <h2 className="text-xs font-semibold uppercase tracking-wider text-text-dim px-1">
+                      Coming Up ({todoGrouped.upcoming.length})
+                    </h2>
+                    {todoGrouped.upcoming.map((item) => (
+                      <TodoCard
+                        key={item.id}
+                        item={item}
+                        isPending={pendingCareIds.has(item.id)}
+                        onDone={() =>
+                          logCare.mutate({
+                            scheduleId: item.id,
+                            plantId: item.plants.id,
+                            careType: item.care_type,
+                            status: 'done',
+                          })
+                        }
+                        onSkip={() =>
+                          logCare.mutate({
+                            scheduleId: item.id,
+                            plantId: item.plants.id,
+                            careType: item.care_type,
+                            status: 'skipped',
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'my-plants' && (
+          <div className="space-y-6">
+            {/* Room management button */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => { setEditingRoom(null); setRoomDialogOpen(true) }}
+                className="flex items-center gap-1.5 text-xs text-plant hover:text-plant/80 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Room
+              </button>
+            </div>
+
+            {plants.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-plant-bg flex items-center justify-center mb-4">
+                  <Leaf className="w-8 h-8 text-plant" />
+                </div>
+                <p className="text-text-muted text-sm font-medium mb-1">No plants yet</p>
+                <p className="text-text-dim text-xs mb-4">
+                  Add your first plant to start tracking care
+                </p>
+                <button
+                  onClick={() => setAddPlantOpen(true)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-plant text-bg-primary hover:bg-plant/90 transition-colors cursor-pointer"
+                >
+                  Add Plant
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Plants grouped by room */}
+                {rooms.map((room) => {
+                  const roomPlants = plantsByRoom.get(room.id) ?? []
+                  if (roomPlants.length === 0) return null
+                  return (
+                    <RoomSection
+                      key={room.id}
+                      room={room}
+                      plants={roomPlants}
+                      onPlantClick={(p) => setSelectedPlantId(p.id)}
+                      onEditRoom={() => { setEditingRoom(room); setRoomDialogOpen(true) }}
+                    />
+                  )
+                })}
+
+                {/* Unassigned plants */}
+                {plantsByRoom.has(null) && (
+                  <RoomSection
+                    room={null}
+                    plants={plantsByRoom.get(null)!}
+                    onPlantClick={(p) => setSelectedPlantId(p.id)}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Add Plant dialog */}
+      <AddPlantDialog
+        open={addPlantOpen}
+        onOpenChange={setAddPlantOpen}
+        rooms={rooms}
+        userId={userId}
+        onSuccess={() => {}}
+      />
+
+      {/* Room dialog */}
+      <RoomDialog
+        open={roomDialogOpen}
+        onOpenChange={setRoomDialogOpen}
+        room={editingRoom}
+        userId={userId}
+      />
+
+      {/* Plant detail bottom sheet */}
+      {sheetMountedId && (
+        <PlantDetailSheet
+          plant={selectedPlant}
+          visible={sheetVisible}
+          onClose={closeSheet}
+        />
+      )}
+    </div>
+  )
+}

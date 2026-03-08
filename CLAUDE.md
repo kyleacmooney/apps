@@ -24,12 +24,17 @@ src/
   lib/workout-utils.ts         # Workout formatting helpers (set display, relative dates)
   context/AuthContext.tsx       # Google OAuth provider, useAuth() hook
   components/ProtectedRoute.tsx # Redirects to login if unauthenticated
-  components/ui/               # shadcn/ui components (accordion, badge, button, card, input)
+  lib/plant-types.ts           # TypeScript interfaces for plant domain
+  lib/plant-care-algorithm.ts  # Smart watering interval computation
+  lib/plant-utils.ts           # Care type labels, icons, colors, formatting
+  components/ui/               # shadcn/ui components (accordion, badge, button, card, dialog, dropdown-menu, input, label, select, separator, switch, tabs, textarea)
   pages/Home.tsx               # Landing page with nav cards
   pages/Exercises.tsx          # Exercise encyclopedia with search/filters
   pages/Workouts.tsx           # Workout session history
+  pages/Plants.tsx             # Plant care tracker (first write-capable feature)
 docs/
   workout-logging-instructions.md  # Claude.ai prompt for logging workouts to Supabase
+  plant-care-instructions.md       # Claude.ai prompt for researching plants + updating Supabase
 ```
 
 ## Key Patterns
@@ -48,8 +53,10 @@ docs/
 
 - Project: `claude-managed` (ID: `svmjtlsdyghxilpcdywc`)
 - Auth: Google OAuth
-- Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets` — all RLS-enabled
+- Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles` — all RLS-enabled
+- Edge Functions: `perenual-proxy` (plant species search, requires `PERENUAL_API_KEY` secret)
 - **Workout logging instructions** (used in Claude.ai conversations): [`docs/workout-logging-instructions.md`](docs/workout-logging-instructions.md)
+- **Plant care instructions** (used in Claude.ai conversations): [`docs/plant-care-instructions.md`](docs/plant-care-instructions.md)
 
 ## Preview Verification
 
