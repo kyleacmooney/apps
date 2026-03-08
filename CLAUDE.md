@@ -35,6 +35,11 @@ src/
 docs/
   workout-logging-instructions.md  # Claude.ai prompt for logging workouts to Supabase
   plant-care-instructions.md       # Claude.ai prompt for researching plants + updating Supabase
+supabase/
+  config.toml                      # Supabase CLI project config (local dev settings)
+  migrations/                      # All DDL migrations (applied via MCP or CLI)
+  functions/                       # Edge function source code (one dir per function)
+    proxy-image-upload/index.ts    # Downloads external images → Supabase Storage
 ```
 
 ## Key Patterns
@@ -60,6 +65,15 @@ docs/
 - `species_profiles` is the primary source of species data, populated by Claude.ai via `docs/plant-care-instructions.md`
 - **Workout logging instructions** (used in Claude.ai conversations): [`docs/workout-logging-instructions.md`](docs/workout-logging-instructions.md)
 - **Plant care instructions** (used in Claude.ai conversations): [`docs/plant-care-instructions.md`](docs/plant-care-instructions.md)
+
+### Version Control Convention
+
+**All Supabase resources must be version-controlled in the `supabase/` directory.** The deployed state of Supabase should always be reproducible from this repo.
+
+- **Migrations** (`supabase/migrations/`): Every DDL change (schema, RLS policies, storage buckets, extensions) must have a corresponding `.sql` file. When applying migrations via the Supabase MCP `apply_migration` tool, always write the same SQL to `supabase/migrations/<version>_<name>.sql` and commit it. The version timestamp and name should match what's recorded in Supabase's migration history.
+- **Edge Functions** (`supabase/functions/<function-name>/`): Every deployed edge function must have its source checked into the repo. After deploying via `deploy_edge_function` MCP tool or `supabase functions deploy`, ensure the source files are committed. One directory per function, matching the function slug.
+- **Config** (`supabase/config.toml`): Supabase CLI project configuration. Update when changing local dev settings.
+- **What's NOT versioned**: Data (seed files are optional), secrets/env vars, `.temp/` state (gitignored).
 
 ## Preview Verification
 
