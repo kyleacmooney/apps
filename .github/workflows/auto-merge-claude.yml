@@ -1,4 +1,4 @@
-name: Auto-merge Claude branches
+name: Auto-merge Claude/Cursor branches
 
 on:
   push:
