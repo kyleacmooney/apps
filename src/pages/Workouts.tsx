@@ -863,7 +863,7 @@ export function Workouts() {
 
   // Deep-link
   const [linkedSession, setLinkedSession] = useState<WorkoutSession | null>(null)
-  const [linkedSessionLoading, setLinkedSessionLoading] = useState(false)
+
 
   // Planned sessions
   const plannedQuery = useQuery({
@@ -922,8 +922,6 @@ export function Workouts() {
     const sessionId = searchParams.get("session")
     if (!sessionId) return
 
-    setLinkedSessionLoading(true)
-
     supabase
       .from("workout_sessions")
       .select(SESSION_SELECT)
@@ -934,7 +932,6 @@ export function Workouts() {
           setLinkedSession(data as WorkoutSession)
           setExpandedSessionIds((prev) => new Set([...prev, data.id]))
         }
-        setLinkedSessionLoading(false)
       })
 
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1220,12 +1217,6 @@ export function Workouts() {
             )}
 
             {/* Deep-linked session */}
-            {linkedSessionLoading && (
-              <div className="mb-4 p-4 rounded-xl border border-border-default bg-bg-secondary animate-pulse">
-                <div className="h-4 bg-bg-elevated rounded w-1/3 mb-2" />
-                <div className="h-3 bg-bg-elevated rounded w-1/2" />
-              </div>
-            )}
 
             {linkedSession && (
               <div className="mb-6">
