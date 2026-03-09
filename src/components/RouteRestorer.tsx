@@ -16,12 +16,10 @@ export function RouteRestorer() {
   useEffect(() => {
     const savedRoute = localStorage.getItem(ROUTE_KEY)
     if (!savedRoute || savedRoute === '/' || savedRoute === fullPath) {
-      // Already on the right route (or no saved route) — restore scroll directly
       hasRestored.current = true
       restoreScroll()
     } else {
       navigate(savedRoute, { replace: true })
-      // hasRestored stays false — scroll will be restored in the fullPath effect below
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -29,7 +27,6 @@ export function RouteRestorer() {
   // After navigating to the restored route, restore scroll position
   useEffect(() => {
     if (hasRestored.current) return
-    // Check if we've arrived at the saved route
     const savedRoute = localStorage.getItem(ROUTE_KEY)
     if (savedRoute && fullPath === savedRoute) {
       hasRestored.current = true
@@ -77,20 +74,30 @@ export function RouteRestorer() {
   return null
 }
 
-/** Poll until the page is tall enough to scroll to the saved position, then scroll. */
+/** Reveal the page (body was hidden by inline script in index.html to prevent jump). */
+function revealPage() {
+  document.body.style.opacity = '1'
+}
+
+/**
+ * Poll until the page is tall enough, scroll instantly (hidden behind opacity:0),
+ * then fade the page in so the user sees it already in position.
+ */
 function restoreScroll() {
   const raw = localStorage.getItem(SCROLL_KEY)
-  if (!raw) return
+  if (!raw) { revealPage(); return }
   const y = parseInt(raw, 10)
-  if (isNaN(y) || y === 0) return
+  if (isNaN(y) || y === 0) { revealPage(); return }
 
   let attempts = 0
-  const maxAttempts = 50 // 5 seconds
+  const maxAttempts = 50 // 5 seconds max
   const interval = setInterval(() => {
     attempts++
     if (document.documentElement.scrollHeight >= y + window.innerHeight || attempts >= maxAttempts) {
       clearInterval(interval)
-      window.scrollTo({ top: y, behavior: 'smooth' })
+      window.scrollTo(0, y)
+      // Reveal after a microtask so the browser paints at the new scroll position
+      requestAnimationFrame(() => revealPage())
     }
   }, 100)
 }

@@ -19,6 +19,13 @@
     <link rel="apple-touch-icon" href="/apps/apple-touch-icon.png" />
   </head>
   <body>
+    <!-- Hide body until scroll position is restored to prevent visible jump -->
+    <script>
+      if (localStorage.getItem('lastScroll') > '0' && localStorage.getItem('lastRoute')) {
+        document.body.style.opacity = '0';
+        document.body.style.transition = 'opacity 0.15s ease-in';
+      }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
