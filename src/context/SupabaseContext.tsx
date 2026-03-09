@@ -13,6 +13,10 @@ interface SupabaseContextValue {
   externalUrl: string | null
   /** True while fetching user_settings after auth */
   settingsLoading: boolean
+   /** How the data client is authenticated (shared-only vs external authed/anon) */
+  authMode: 'shared-only' | 'external-authed' | 'external-anon' | 'external-error'
+  /** Error message if attempting to auth against the external backend failed */
+  externalAuthError: string | null
   /** Save external Supabase configuration */
   saveExternalBackend: (url: string, anonKey: string) => Promise<void>
   /** Remove external Supabase configuration (revert to shared backend) */
@@ -22,9 +26,11 @@ interface SupabaseContextValue {
 const SupabaseContext = createContext<SupabaseContextValue | undefined>(undefined)
 
 export function SupabaseProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, idToken } = useAuth()
   const [externalConfig, setExternalConfig] = useState<{ url: string; key: string } | null>(null)
   const [settingsLoading, setSettingsLoading] = useState(true)
+  const [authMode, setAuthMode] = useState<'shared-only' | 'external-authed' | 'external-anon' | 'external-error'>('shared-only')
+  const [externalAuthError, setExternalAuthError] = useState<string | null>(null)
 
   // Fetch user_settings when user changes
   useEffect(() => {
@@ -70,6 +76,64 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     }
   }, [dataClient, prevClientRef])
 
+  // Keep track of how the current data client is authenticated.
+  useEffect(() => {
+    if (!externalConfig) {
+      setAuthMode('shared-only')
+      setExternalAuthError(null)
+      return
+    }
+
+    // Default for external projects is anon-only; a successful signInWithIdToken
+    // will promote this to "external-authed".
+    setAuthMode((current) =>
+      current === 'external-authed' || current === 'external-error' ? current : 'external-anon',
+    )
+  }, [externalConfig])
+
+  // When we have both an external backend and a Google ID token, attempt to
+  // authenticate against the external Supabase project using signInWithIdToken.
+  useEffect(() => {
+    let cancelled = false
+
+    async function maybeAuthExternal() {
+      if (!externalConfig || !idToken) {
+        if (!externalConfig) {
+          setAuthMode('shared-only')
+          setExternalAuthError(null)
+        }
+        return
+      }
+
+      try {
+        const { error } = await dataClient.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        })
+
+        if (cancelled) return
+
+        if (error) {
+          setAuthMode('external-anon')
+          setExternalAuthError(error.message)
+        } else {
+          setAuthMode('external-authed')
+          setExternalAuthError(null)
+        }
+      } catch (err) {
+        if (cancelled) return
+        setAuthMode('external-error')
+        setExternalAuthError(err instanceof Error ? err.message : 'Failed to authenticate external Supabase project.')
+      }
+    }
+
+    void maybeAuthExternal()
+
+    return () => {
+      cancelled = true
+    }
+  }, [externalConfig, idToken, dataClient])
+
   const saveExternalBackend = useCallback(async (url: string, anonKey: string) => {
     if (!user) return
 
@@ -110,9 +174,11 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     isExternalBackend: !!externalConfig,
     externalUrl: externalConfig?.url ?? null,
     settingsLoading,
+    authMode,
+    externalAuthError,
     saveExternalBackend,
     clearExternalBackend,
-  }), [dataClient, externalConfig, settingsLoading, saveExternalBackend, clearExternalBackend])
+  }), [dataClient, externalConfig, settingsLoading, authMode, externalAuthError, saveExternalBackend, clearExternalBackend])
 
   return (
     <SupabaseContext.Provider value={value}>

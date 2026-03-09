@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createClient } from '@supabase/supabase-js'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth, GOOGLE_CLIENT_ID } from '@/context/AuthContext'
 import { useSupabaseSettings } from '@/context/SupabaseContext'
 import { usePersistedState } from '@/lib/use-persisted-state'
 import {
@@ -22,14 +22,15 @@ import {
 import { cn } from '@/lib/utils'
 
 const SCHEMA_RAW_URL = 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/schema.sql'
+const SCHEMA_AUTH_RAW_URL = 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/schema-auth.sql'
 const SUPABASE_DASHBOARD = 'https://supabase.com/dashboard'
 const SUPABASE_API_SETTINGS = 'https://supabase.com/dashboard/project/_/settings/api'
 
 const STEPS = [
   { id: 1, title: 'Create project', icon: Database },
   { id: 2, title: 'Copy credentials', icon: Key },
-  { id: 3, title: 'Run schema', icon: FileCode },
-  { id: 4, title: 'Verify', icon: ShieldCheck },
+  { id: 3, title: 'Choose security mode', icon: ShieldCheck },
+  { id: 4, title: 'Run schema', icon: FileCode },
   { id: 5, title: 'Connect Claude', icon: Bot },
 ] as const
 
@@ -44,6 +45,7 @@ export function Setup() {
   const [step, setStep] = usePersistedState(`${storageKey}:step`, 1)
   const [url, setUrl] = usePersistedState(`${storageKey}:url`, '')
   const [anonKey, setAnonKey] = usePersistedState(`${storageKey}:anon-key`, '')
+  const [securityMode, setSecurityMode] = usePersistedState<'simple' | 'secure'>(`${storageKey}:security-mode`, 'simple')
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('idle')
   const [verifyMessage, setVerifyMessage] = useState('')
   const [saving, setSaving] = useState(false)
@@ -66,7 +68,7 @@ export function Setup() {
       if (error) {
         if (error.message.includes('relation') && error.message.includes('does not exist')) {
           setVerifyStatus('error')
-          setVerifyMessage('Schema not found. Run the SQL in Step 3 in your Supabase SQL Editor, then try again.')
+          setVerifyMessage('Schema not found. Run the SQL above in your Supabase SQL Editor, then try again.')
         } else {
           setVerifyStatus('error')
           setVerifyMessage(error.message)
@@ -222,16 +224,107 @@ export function Setup() {
           </div>
         )}
 
-        {/* Step 3: Run schema */}
+        {/* Step 3: Choose security mode */}
         {step === 3 && (
           <div className="space-y-4">
             <p className="text-text-secondary text-sm">
-              Create the tables and policies the app needs. In your Supabase project, open the{' '}
-              <strong className="text-text-primary">SQL Editor</strong>, then:
+              Choose how strict you want access control to be on your project. You can start simple and switch to a secure, auth-gated setup later.
+            </p>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setSecurityMode('simple')}
+                className={cn(
+                  'w-full text-left rounded-xl border px-3 py-3 text-sm transition-colors',
+                  'bg-bg-secondary border-border-default hover:border-border-hover',
+                  securityMode === 'simple' && 'border-lower-border bg-lower-bg/40'
+                )}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="font-medium text-text-primary">Simple (no auth)</span>
+                  {securityMode === 'simple' && <Check className="w-4 h-4 text-lower" />}
+                </div>
+                <p className="text-text-secondary text-xs mb-1">
+                  Permissive RLS. Anyone with your anon key can read and write. Best for single-user projects where the URL is private.
+                </p>
+                <p className="text-text-dim text-[11px]">
+                  Uses <code className="text-text-muted bg-bg-elevated px-1 rounded">docs/schema.sql</code>. The app sends a synthetic
+                  user_id so multi-user features still work.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSecurityMode('secure')}
+                className={cn(
+                  'w-full text-left rounded-xl border px-3 py-3 text-sm transition-colors',
+                  'bg-bg-secondary border-border-default hover:border-border-hover',
+                  securityMode === 'secure' && 'border-upper-pull-border bg-upper-pull-bg/40'
+                )}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="font-medium text-text-primary">Secure (auth-enabled)</span>
+                  {securityMode === 'secure' && <ShieldCheck className="w-4 h-4 text-upper-pull" />}
+                </div>
+                <p className="text-text-secondary text-xs mb-1">
+                  Auth-gated RLS that uses <code className="text-text-muted bg-bg-elevated px-1 rounded">auth.uid()</code>. Requires Google
+                  OAuth on your project. Safer for shared or long-lived backends.
+                </p>
+                <p className="text-text-dim text-[11px]">
+                  You&apos;ll run the base schema first, then an auth patch (
+                  <code className="text-text-muted bg-bg-elevated px-1 rounded">docs/schema-auth.sql</code>) once Google is configured.
+                </p>
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-border-default bg-bg-secondary px-3 py-2 mt-2">
+              <p className="text-text-muted text-xs font-medium mb-1">How Google OAuth fits in</p>
+              <p className="text-text-secondary text-xs mb-1">
+                In <strong className="text-text-primary">Secure</strong> mode, both this app and Claude sign in with the same Google
+                Identity Services client ID. Supabase uses that identity to enforce row-level security per user.
+              </p>
+              <p className="text-text-dim text-[11px]">
+                You&apos;ll configure the Google provider on your Supabase project using the shared client ID below, so one Google sign-in
+                can authenticate both Kyle&apos;s shared backend and your own project.
+              </p>
+            </div>
+
+            <div className="space-y-1 pt-1">
+              <p className="text-text-muted text-xs font-mono">Shared Google client ID</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={GOOGLE_CLIENT_ID ?? ''}
+                  readOnly
+                  className="flex-1 py-2 px-3 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-[11px] font-mono truncate"
+                  placeholder="Set VITE_GOOGLE_CLIENT_ID in your environment"
+                />
+              </div>
+              <p className="text-text-dim text-[11px]">
+                In Supabase, go to <span className="font-medium">Authentication → Providers → Google</span> and paste this client ID. If
+                it&apos;s blank in your fork, set <code className="text-text-muted bg-bg-elevated px-1 rounded">VITE_GOOGLE_CLIENT_ID</code>{' '}
+                before building.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Run schema + verify */}
+        {step === 4 && (
+          <div className="space-y-4">
+            <p className="text-text-secondary text-sm">
+              Create the tables and policies the app needs, then confirm the app can reach your project. In your Supabase project, open the{' '}
+              <strong className="text-text-primary">SQL Editor</strong>.
             </p>
             <ol className="list-decimal list-inside space-y-2 text-text-secondary text-sm">
               <li>Click <strong className="text-text-primary">New query</strong>.</li>
-              <li>Open the schema file (link below) and copy all of its SQL.</li>
+              <li>
+                Open{' '}
+                <code className="text-text-muted bg-bg-elevated px-1 rounded">
+                  {securityMode === 'secure' ? 'docs/schema.sql + docs/schema-auth.sql' : 'docs/schema.sql'}
+                </code>{' '}
+                and copy the SQL you need.
+              </li>
               <li>Paste into the editor and click <strong className="text-text-primary">Run</strong>.</li>
             </ol>
             <a
@@ -246,6 +339,20 @@ export function Setup() {
               Open schema.sql (copy all)
               <ExternalLink className="w-4 h-4" />
             </a>
+            {securityMode === 'secure' && (
+              <a
+                href={SCHEMA_AUTH_RAW_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  'flex items-center gap-2 w-full justify-center py-3 rounded-xl border text-sm font-medium',
+                  'border-border-default bg-bg-secondary text-text-primary hover:border-border-hover transition-colors no-underline'
+                )}
+              >
+                Open schema-auth.sql (copy all)
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
             <button
               type="button"
               onClick={copySchemaUrl}
@@ -258,16 +365,9 @@ export function Setup() {
               {copied ? 'Copied link' : 'Copy raw file link'}
             </button>
             <p className="text-text-dim text-xs">
-              This creates exercises, workouts, plants, care schedules, and storage. Run it once per project.
-            </p>
-          </div>
-        )}
-
-        {/* Step 4: Verify */}
-        {step === 4 && (
-          <div className="space-y-4">
-            <p className="text-text-secondary text-sm">
-              Confirm the app can reach your project and that the schema was applied. Then we’ll save this backend to your account.
+              This creates exercises, workouts, plants, care schedules, and storage. If you chose{' '}
+              <strong className="text-text-primary">Secure</strong>, run the auth patch from{' '}
+              <code className="text-text-muted bg-bg-elevated px-1 rounded">docs/schema-auth.sql</code> after turning on Google.
             </p>
             {verifyStatus !== 'idle' && (
               <div
@@ -344,6 +444,7 @@ export function Setup() {
                 setStep(1)
                 setUrl('')
                 setAnonKey('')
+                setSecurityMode('simple')
                 navigate('/')
               }}
               className={cn(

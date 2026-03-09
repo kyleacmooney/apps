@@ -2,9 +2,20 @@
 -- Template schema for a fresh Supabase project (Apps backend)
 -- ============================================================
 -- Run this in the Supabase SQL Editor (Dashboard → SQL Editor → New query).
--- Uses permissive RLS so the anon key can read/write (Phase 4 auth optional).
--- user_id columns do NOT FK to auth.users so the app works with anon-only
--- (app sends user_id from the shared Supabase auth). Do NOT create user_settings here.
+--
+-- This is the **Simple (no auth)** variant:
+-- - Permissive RLS so the anon key can read/write everything
+-- - user_id columns do NOT FK to auth.users — the app can still
+--   simulate per-user data by sending a user_id from Kyle's shared
+--   Supabase project even if your project has no auth configured.
+--
+-- If you later enable Google OAuth on your own Supabase project and
+-- want real per-user access control, run docs/schema-auth.sql after
+-- this file. That patch switches RLS to auth.uid()-based policies
+-- while keeping the same table structure.
+--
+-- Do NOT create user_settings here — that table only lives on the
+-- shared Supabase backend.
 -- ============================================================
 
 -- Extensions

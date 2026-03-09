@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createClient } from '@supabase/supabase-js'
 import { useSupabaseSettings } from '@/context/SupabaseContext'
-import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home } from 'lucide-react'
+import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
@@ -13,6 +13,8 @@ export function Settings() {
     isExternalBackend,
     externalUrl,
     settingsLoading,
+    authMode,
+    externalAuthError,
     saveExternalBackend,
     clearExternalBackend,
   } = useSupabaseSettings()
@@ -157,6 +159,41 @@ export function Settings() {
           {isExternalBackend && externalUrl && (
             <div className="mt-2 ml-[30px]">
               <span className="text-text-dim text-[11px] font-mono break-all">{externalUrl}</span>
+            </div>
+          )}
+          {isExternalBackend && (
+            <div className="mt-3 ml-[30px] flex flex-wrap items-center gap-2">
+              {authMode === 'external-authed' && (
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+                  'bg-lower-bg text-lower border border-lower-border'
+                )}>
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Authenticated (Secure)
+                </span>
+              )}
+              {authMode === 'external-anon' && (
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+                  'bg-bg-elevated text-text-muted border border-border-default'
+                )}>
+                  Anon-only (Simple)
+                </span>
+              )}
+              {authMode === 'external-error' && (
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+                  'bg-upper-push-bg/50 text-upper-push border border-upper-push-border'
+                )}>
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  Auth failed
+                </span>
+              )}
+              {externalAuthError && authMode !== 'external-authed' && (
+                <span className="text-text-dim text-[11px] max-w-full" title={externalAuthError}>
+                  {externalAuthError.length > 50 ? `${externalAuthError.slice(0, 50)}…` : externalAuthError}
+                </span>
+              )}
             </div>
           )}
         </div>

@@ -74,6 +74,15 @@ supabase/
 - **Workout logging instructions** (used in Claude.ai conversations): [`docs/workout-logging-instructions.md`](docs/workout-logging-instructions.md)
 - **Plant care instructions** (used in Claude.ai conversations): [`docs/plant-care-instructions.md`](docs/plant-care-instructions.md)
 
+### Dual-auth model (shared + external)
+
+- **Shared Supabase (Kyle&rsquo;s project):** The app uses Google Identity Services (GIS) in the browser to obtain a Google ID token, then calls `supabase.auth.signInWithIdToken({ provider: 'google', token })` on the shared project. This is the canonical source of `auth.uid()` for the app.
+- **External Supabase (user project):** If a user configures their own Supabase URL + anon key in Settings, `SupabaseContext` creates a second client for data access. After a successful Google sign-in, it will also attempt `signInWithIdToken` against the external project using the same GIS ID token.
+- If the external project is **not** configured for Google OAuth (or the sign-in fails), the external client cleanly falls back to anon-only access while the shared backend remains fully authenticated. `authMode` from `useSupabaseSettings()` reports whether the data client is `shared-only`, `external-authed`, or `external-anon`.
+- The setup wizard (`Setup` page) offers two schema modes for external projects:
+  - **Simple (no auth):** Run `docs/schema.sql` only — permissive RLS, suitable for single-user setups where the anon key is effectively private.
+  - **Secure (auth-enabled):** Run `docs/schema.sql` and then `docs/schema-auth.sql` after enabling the Google provider on the user&rsquo;s Supabase project with the shared Google client ID. This mode mirrors Kyle&rsquo;s shared project: RLS uses `auth.uid()` for row ownership, and both the app and Claude (via the Supabase MCP) authenticate with the same Google identity.
+
 ### Version Control Convention
 
 **All Supabase resources must be version-controlled in the `supabase/` directory.** The deployed state of Supabase should always be reproducible from this repo.
