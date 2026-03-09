@@ -27,7 +27,9 @@ const parseJwtExpiration = (token: string): number | null => {
   try {
     const parts = token.split('.')
     if (parts.length < 2) return null
-    const payload = JSON.parse(atob(parts[1]))
+    const normalizedPayload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, '=')
+    const payload = JSON.parse(atob(paddedPayload))
     return typeof payload.exp === 'number' ? payload.exp : null
   } catch {
     return null
