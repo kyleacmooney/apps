@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/query-client'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { RouteRestorer } from './components/RouteRestorer'
 import { Home } from './pages/Home'
 import { Exercises } from './pages/Exercises'
 import { Workouts } from './pages/Workouts'
@@ -13,6 +14,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <HashRouter>
+        <RouteRestorer />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route

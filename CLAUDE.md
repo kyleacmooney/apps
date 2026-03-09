@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Mobile-first single-page React app serving personal tools at https://kyleacmooney.github.io/apps/. Uses HashRouter for GitHub Pages compatibility and Supabase for auth + data. All UI decisions should prioritize touch interactions, thumb-reachable layouts, and mobile viewport ergonomics.
+Mobile-first single-page React app serving personal tools at https://kyleacmooney.github.io/apps/. Uses HashRouter for GitHub Pages compatibility and Supabase for auth + data. All UI decisions should prioritize touch interactions, thumb-reachable layouts, and mobile viewport ergonomics. Intended to be used as a standalone PWA via Safari "Add to Home Screen" on iPhone — `apple-mobile-web-app-capable` and `manifest.json` (display: standalone) are configured in `index.html`. Route persistence across app suspensions is handled by `RouteRestorer` (saves the current path to localStorage).
 
 ## Commands
 
