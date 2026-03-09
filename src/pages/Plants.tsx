@@ -284,20 +284,20 @@ function AddPlantDialog({
 }) {
   const queryClient = useQueryClient()
 
-  // Form state
-  const [nickname, setNickname] = useState('')
-  const [speciesName, setSpeciesName] = useState('')
-  const [scientificName, setScientificName] = useState('')
-  const [wateringEstimate, setWateringEstimate] = useState(7)
-  const [profileWatering, setProfileWatering] = useState<number | null>(null)
-  const [profileMisting, setProfileMisting] = useState<boolean | null>(null)
-  const [roomId, setRoomId] = useState('__none__')
-  const [potMaterial, setPotMaterial] = useState<PotMaterial>('ceramic')
-  const [potSize, setPotSize] = useState<PotSize>('medium')
-  const [lightLevel, setLightLevel] = useState<LightLevel>('medium')
+  // Form state (persisted so partial input survives iOS app suspension)
+  const [nickname, setNickname] = usePersistedState('plants:form:nickname', '')
+  const [speciesName, setSpeciesName] = usePersistedState('plants:form:speciesName', '')
+  const [scientificName, setScientificName] = usePersistedState('plants:form:scientificName', '')
+  const [wateringEstimate, setWateringEstimate] = usePersistedState('plants:form:wateringEstimate', 7)
+  const [profileWatering, setProfileWatering] = usePersistedState<number | null>('plants:form:profileWatering', null)
+  const [profileMisting, setProfileMisting] = usePersistedState<boolean | null>('plants:form:profileMisting', null)
+  const [roomId, setRoomId] = usePersistedState('plants:form:roomId', '__none__')
+  const [potMaterial, setPotMaterial] = usePersistedState<PotMaterial>('plants:form:potMaterial', 'ceramic')
+  const [potSize, setPotSize] = usePersistedState<PotSize>('plants:form:potSize', 'medium')
+  const [lightLevel, setLightLevel] = usePersistedState<LightLevel>('plants:form:lightLevel', 'medium')
 
   // Species autocomplete
-  const [speciesQuery, setSpeciesQuery] = useState('')
+  const [speciesQuery, setSpeciesQuery] = usePersistedState('plants:form:speciesQuery', '')
   const [debouncedSpeciesQuery, setDebouncedSpeciesQuery] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
@@ -1106,7 +1106,7 @@ export function Plants() {
 
   // UI state
   const [activeTab, setActiveTab] = usePersistedState('plants:activeTab', 'todo')
-  const [addPlantOpen, setAddPlantOpen] = useState(false)
+  const [addPlantOpen, setAddPlantOpen] = usePersistedState('plants:addPlantOpen', false)
   const [roomDialogOpen, setRoomDialogOpen] = useState(false)
   const [editingRoom, setEditingRoom] = useState<Room | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
