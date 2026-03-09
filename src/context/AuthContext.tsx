@@ -10,6 +10,32 @@ declare global {
 }
 
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+const GOOGLE_ID_TOKEN_STORAGE_KEY = 'apps.google_id_token'
+
+function getTokenExpiryMs(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1] ?? ''))
+    const expSeconds = typeof payload?.exp === 'number' ? payload.exp : null
+    return expSeconds ? expSeconds * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+function isTokenUsable(token: string): boolean {
+  const expiryMs = getTokenExpiryMs(token)
+  // Keep a small clock-skew buffer so we don't reuse near-expiry tokens.
+  return !!expiryMs && expiryMs > Date.now() + 60_000
+}
+
+function getStoredIdToken(): string | null {
+  const token = localStorage.getItem(GOOGLE_ID_TOKEN_STORAGE_KEY)
+  if (!token || !isTokenUsable(token)) {
+    localStorage.removeItem(GOOGLE_ID_TOKEN_STORAGE_KEY)
+    return null
+  }
+  return token
+}
 
 interface AuthState {
   user: User | null
@@ -38,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  const [idToken, setIdToken] = useState<string | null>(null)
+  const [idToken, setIdToken] = useState<string | null>(() => getStoredIdToken())
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -58,44 +84,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Silently re-obtain the Google ID token for returning users so
-  // SupabaseContext can authenticate against external backends.
   useEffect(() => {
-    if (!session || idToken || !GOOGLE_CLIENT_ID) return
-
-    let cancelled = false
-
-    async function reObtainToken() {
-      try {
-        const google = await loadGoogleIdentityScript()
-        if (!google?.accounts?.id || cancelled) return
-
-        const [, hashedNonce] = await generateNonce()
-
-        google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID!,
-          auto_select: true,
-          nonce: hashedNonce,
-          callback: (response: { credential?: string }) => {
-            if (cancelled) return
-            if (response.credential) {
-              setIdToken(response.credential)
-            }
-          },
-        })
-
-        google.accounts.id.prompt()
-      } catch {
-        // GIS unavailable — silently degrade to anon-only for external backends.
-      }
+    if (idToken && isTokenUsable(idToken)) {
+      localStorage.setItem(GOOGLE_ID_TOKEN_STORAGE_KEY, idToken)
+      return
     }
-
-    void reObtainToken()
-
-    return () => {
-      cancelled = true
-    }
-  }, [session, idToken])
+    localStorage.removeItem(GOOGLE_ID_TOKEN_STORAGE_KEY)
+  }, [idToken])
 
   async function loadGoogleIdentityScript() {
     if (window.google) return window.google
