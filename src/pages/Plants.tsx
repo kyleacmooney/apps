@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { usePersistedState } from '@/lib/use-persisted-state'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
@@ -1104,14 +1105,14 @@ export function Plants() {
   const userId = user?.id ?? ''
 
   // UI state
-  const [activeTab, setActiveTab] = useState('todo')
+  const [activeTab, setActiveTab] = usePersistedState('plants:activeTab', 'todo')
   const [addPlantOpen, setAddPlantOpen] = useState(false)
   const [roomDialogOpen, setRoomDialogOpen] = useState(false)
   const [editingRoom, setEditingRoom] = useState<Room | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Plant detail sheet state (mount/unmount animation)
-  const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null)
+  const [selectedPlantId, setSelectedPlantId] = usePersistedState<string | null>('plants:selectedPlantId', null)
   const [sheetMountedId, setSheetMountedId] = useState<string | null>(null)
   const [sheetVisible, setSheetVisible] = useState(false)
   const sheetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)

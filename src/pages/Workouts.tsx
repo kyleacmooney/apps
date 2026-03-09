@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { usePersistedState } from "@/lib/use-persisted-state"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { formatSet, parseLocalDate, getWeekStartStr, getWeekLabel, type TrendSet } from "@/lib/workout-utils"
@@ -850,7 +851,7 @@ const PAGE_SIZE = 30
 const SESSION_TYPES = ["all", "workout", "mobility", "mixed"] as const
 
 export function Workouts() {
-  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
+  const [expandedSessionIds, setExpandedSessionIds] = usePersistedState<Set<string>>('workouts:expandedIds', new Set())
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const canGoForward = useCanGoForward()
@@ -858,8 +859,8 @@ export function Workouts() {
   const viewMode: ViewMode = searchParams.get("view") === "calendar" ? "calendar" : "list"
 
   // Session type filter
-  const [activeFilter, setActiveFilter] = useState<string>("all")
-  const [excludedTypes, setExcludedTypes] = useState<Set<string>>(new Set())
+  const [activeFilter, setActiveFilter] = usePersistedState<string>('workouts:activeFilter', "all")
+  const [excludedTypes, setExcludedTypes] = usePersistedState<Set<string>>('workouts:excludedTypes', new Set())
 
   // Deep-link
   const [linkedSession, setLinkedSession] = useState<WorkoutSession | null>(null)

@@ -27,6 +27,8 @@ src/
   lib/plant-types.ts           # TypeScript interfaces for plant domain
   lib/plant-care-algorithm.ts  # Smart watering interval computation
   lib/plant-utils.ts           # Care type labels, icons, colors, formatting
+  lib/use-persisted-state.ts   # usePersistedState hook — localStorage-backed useState for iOS PWA state survival
+  components/RouteRestorer.tsx  # Saves/restores current route + scroll position across app suspensions
   components/ui/               # shadcn/ui components (accordion, badge, button, card, dialog, dropdown-menu, input, label, select, separator, switch, tabs, textarea)
   pages/Home.tsx               # Landing page with nav cards
   pages/Exercises.tsx          # Exercise encyclopedia with search/filters
@@ -52,6 +54,7 @@ supabase/
 - **Tailwind CSS v4** — utility-first styling via `@tailwindcss/vite` plugin, dark theme colors defined in `src/index.css`
 - **shadcn/ui** — component primitives in `components/ui/`, installed via `npx shadcn@latest add <component>`
 - **Category colors** — defined as Tailwind theme variables in `index.css`, mapped to class names in `lib/categories.ts`
+- **State persistence for PWA** — this app must feel native on iPhone. Use `usePersistedState` (from `lib/use-persisted-state.ts`) instead of `useState` for any user-facing UI state that should survive iOS app suspensions (expanded items, active tabs, filters, selections). Route + scroll position are handled by `RouteRestorer`. Don't persist transient states like loading indicators, animation flags, or form inputs in dialogs.
 - **Path alias** — `@/` maps to `src/` (configured in vite.config.ts and tsconfig)
 
 ## Supabase

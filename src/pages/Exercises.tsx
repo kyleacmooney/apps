@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { useNavigate, useSearchParams, Link } from "react-router-dom"
+import { usePersistedState } from "@/lib/use-persisted-state"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
@@ -570,8 +571,8 @@ export function Exercises() {
   const error = exerciseData.error?.message ?? null
   const refreshing = exerciseData.isRefetching
 
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [walkthroughExpandedId, setWalkthroughExpandedId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = usePersistedState<string | null>('exercises:expandedId', null)
+  const [walkthroughExpandedId, setWalkthroughExpandedId] = usePersistedState<string | null>('exercises:walkthroughId', null)
   const [linkedExerciseName, setLinkedExerciseName] = useState<string | null>(
     () => searchParams.get("exercise")
   )
