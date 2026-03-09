@@ -21,6 +21,45 @@ interface AuthState {
   idToken: string | null
 }
 
+const GOOGLE_ID_TOKEN_STORAGE_KEY = 'google_id_token'
+
+const parseJwtExpiration = (token: string): number | null => {
+  try {
+    const parts = token.split('.')
+    if (parts.length < 2) return null
+    const payload = JSON.parse(atob(parts[1]))
+    return typeof payload.exp === 'number' ? payload.exp : null
+  } catch {
+    return null
+  }
+}
+
+const isTokenExpired = (token: string): boolean => {
+  const exp = parseJwtExpiration(token)
+  if (!exp) return true
+  const now = Math.floor(Date.now() / 1000)
+  // Consider tokens near expiry invalid to avoid failed downstream auth calls.
+  return exp <= now + 30
+}
+
+const persistGoogleIdToken = (token: string) => {
+  localStorage.setItem(GOOGLE_ID_TOKEN_STORAGE_KEY, token)
+}
+
+const clearPersistedGoogleIdToken = () => {
+  localStorage.removeItem(GOOGLE_ID_TOKEN_STORAGE_KEY)
+}
+
+const readPersistedGoogleIdToken = (): string | null => {
+  const token = localStorage.getItem(GOOGLE_ID_TOKEN_STORAGE_KEY)
+  if (!token) return null
+  if (isTokenExpired(token)) {
+    clearPersistedGoogleIdToken()
+    return null
+  }
+  return token
+}
+
 const generateNonce = async (): Promise<string[]> => {
   const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
   const encoder = new TextEncoder()
@@ -52,48 +91,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null)
       if (!session) {
         setIdToken(null)
+        clearPersistedGoogleIdToken()
       }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  // Silently re-obtain the Google ID token for returning users so
-  // SupabaseContext can authenticate against external backends.
+  // Reuse a previously issued Google ID token for returning users without
+  // showing One Tap/FedCM prompts on app reopen.
   useEffect(() => {
-    if (!session || idToken || !GOOGLE_CLIENT_ID) return
-
-    let cancelled = false
-
-    async function reObtainToken() {
-      try {
-        const google = await loadGoogleIdentityScript()
-        if (!google?.accounts?.id || cancelled) return
-
-        const [, hashedNonce] = await generateNonce()
-
-        google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID!,
-          auto_select: true,
-          nonce: hashedNonce,
-          callback: (response: { credential?: string }) => {
-            if (cancelled) return
-            if (response.credential) {
-              setIdToken(response.credential)
-            }
-          },
-        })
-
-        google.accounts.id.prompt()
-      } catch {
-        // GIS unavailable — silently degrade to anon-only for external backends.
-      }
-    }
-
-    void reObtainToken()
-
-    return () => {
-      cancelled = true
+    if (!session || idToken) return
+    const cachedToken = readPersistedGoogleIdToken()
+    if (cachedToken) {
+      setIdToken(cachedToken)
     }
   }, [session, idToken])
 
@@ -160,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
 
               setIdToken(token)
+              persistGoogleIdToken(token)
 
               const { error } = await supabase.auth.signInWithIdToken({
                 provider: 'google',
@@ -195,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear()
     await supabase.auth.signOut()
     setIdToken(null)
+    clearPersistedGoogleIdToken()
   }
 
   return (
