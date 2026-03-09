@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createClient } from '@supabase/supabase-js'
+import { useAuth } from '@/context/AuthContext'
 import { useSupabaseSettings } from '@/context/SupabaseContext'
-import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
 
 export function Settings() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const {
     isExternalBackend,
     externalUrl,
@@ -153,7 +155,7 @@ export function Settings() {
             </p>
           ) : (
             <p className="text-text-muted text-xs ml-[30px]">
-              Data is stored on the shared Supabase instance. Connect your own project below for full data ownership.
+              Data is stored on the shared Supabase instance. Connect your own project below if you want a separate backend.
             </p>
           )}
           {isExternalBackend && externalUrl && (
@@ -197,6 +199,40 @@ export function Settings() {
             </div>
           )}
         </div>
+
+        {/* Shared backend security info */}
+        {!isExternalBackend && user && (
+          <div className="rounded-xl border border-lower-border bg-lower-bg/60 p-4 mb-6">
+            <div className="flex items-center gap-2.5 mb-2">
+              <Lock className="w-5 h-5 text-lower" />
+              <span className="text-sm font-semibold text-text-primary">
+                Your data is secure
+              </span>
+            </div>
+            <p className="text-text-secondary text-xs ml-[30px] mb-2.5">
+              Signed in as <span className="font-medium text-text-primary">{user.email}</span>. Row-level security enforces that only you can read or write your own data — no other user on the shared backend can access it.
+            </p>
+            <div className="ml-[30px] flex flex-wrap gap-2">
+              <span className={cn(
+                'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+                'bg-lower-bg text-lower border border-lower-border'
+              )}>
+                <ShieldCheck className="w-3.5 h-3.5" />
+                RLS enforced
+              </span>
+              <span className={cn(
+                'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+                'bg-lower-bg text-lower border border-lower-border'
+              )}>
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Google OAuth
+              </span>
+            </div>
+            <p className="text-text-dim text-[11px] ml-[30px] mt-2.5">
+              Setting up a separate project is optional — useful if you want full infrastructure ownership, but not required for security.
+            </p>
+          </div>
+        )}
 
         {/* Connected: show disconnect option */}
         {isExternalBackend && (
@@ -256,7 +292,7 @@ export function Settings() {
                   setTestStatus('idle')
                 }}
                 placeholder="https://xxxxx.supabase.co"
-                className="w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-sm font-mono placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
+                className="w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
               />
             </div>
 
@@ -272,7 +308,7 @@ export function Settings() {
                   setTestStatus('idle')
                 }}
                 placeholder="eyJhbGciOiJIUzI1NiIs..."
-                className="w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-sm font-mono placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
+                className="w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
               />
             </div>
 

@@ -217,7 +217,7 @@ export function Setup() {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://xxxxx.supabase.co"
-                  className="w-full py-2.5 px-3 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-sm font-mono placeholder:text-text-dim outline-none focus:border-border-hover"
+                  className="w-full py-2.5 px-3 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-border-hover"
                 />
               </div>
               <div>
@@ -227,7 +227,7 @@ export function Setup() {
                   value={anonKey}
                   onChange={(e) => setAnonKey(e.target.value)}
                   placeholder="eyJhbGciOiJIUzI1NiIs..."
-                  className="w-full py-2.5 px-3 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-sm font-mono placeholder:text-text-dim outline-none focus:border-border-hover"
+                  className="w-full py-2.5 px-3 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-border-hover"
                 />
               </div>
             </div>
@@ -309,7 +309,7 @@ export function Setup() {
                   type="text"
                   value={GOOGLE_CLIENT_ID ?? ''}
                   readOnly
-                  className="flex-1 py-2 px-3 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-[11px] font-mono truncate"
+                  className="flex-1 py-2 px-3 bg-bg-secondary border border-border-default rounded-lg text-text-primary text-base font-mono truncate"
                   placeholder="Set VITE_GOOGLE_CLIENT_ID in your environment"
                 />
               </div>

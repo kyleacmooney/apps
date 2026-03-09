@@ -1005,7 +1005,7 @@ function PlantDetailSheet({
                             type="number"
                             value={editInterval}
                             onChange={(e) => setEditInterval(e.target.value)}
-                            className="w-14 px-1.5 py-0.5 text-xs bg-bg-elevated border border-border-default rounded text-text-primary text-center"
+                            className="w-16 px-1.5 py-0.5 text-base bg-bg-elevated border border-border-default rounded text-text-primary text-center"
                             min={1}
                             autoFocus
                           />
