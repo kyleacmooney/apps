@@ -90,7 +90,7 @@ function restoreScroll() {
     attempts++
     if (document.documentElement.scrollHeight >= y + window.innerHeight || attempts >= maxAttempts) {
       clearInterval(interval)
-      window.scrollTo(0, y)
+      window.scrollTo({ top: y, behavior: 'smooth' })
     }
   }, 100)
 }
