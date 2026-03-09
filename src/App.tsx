@@ -10,6 +10,7 @@ import { Exercises } from './pages/Exercises'
 import { Workouts } from './pages/Workouts'
 import { Plants } from './pages/Plants'
 import { Settings } from './pages/Settings'
+import { Setup } from './pages/Setup'
 
 export function App() {
   return (
@@ -49,6 +50,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/setup"
+            element={
+              <ProtectedRoute>
+                <Setup />
               </ProtectedRoute>
             }
           />
