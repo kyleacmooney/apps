@@ -21,6 +21,17 @@ interface AuthState {
   idToken: string | null
 }
 
+const generateNonce = async (): Promise<string[]> => {
+  const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+  const encoder = new TextEncoder()
+  const encodedNonce = encoder.encode(nonce)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encodedNonce)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  const hashedNonce = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+
+  return [nonce, hashedNonce]
+}
+
 const AuthContext = createContext<AuthState | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -59,9 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const google = await loadGoogleIdentityScript()
         if (!google?.accounts?.id || cancelled) return
 
+        const [, hashedNonce] = await generateNonce()
+
         google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID!,
           auto_select: true,
+          nonce: hashedNonce,
           callback: (response: { credential?: string }) => {
             if (cancelled) return
             if (response.credential) {
@@ -124,10 +138,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Google Identity Services not available in this browser.')
     }
 
+    const [nonce, hashedNonce] = await generateNonce()
+
     await new Promise<void>((resolve, reject) => {
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         auto_select: false,
+        nonce: hashedNonce,
         callback: async (response: { credential?: string }) => {
           try {
             const token = response.credential
@@ -141,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const { error } = await supabase.auth.signInWithIdToken({
               provider: 'google',
               token,
+              nonce,
             })
 
             if (error) {
