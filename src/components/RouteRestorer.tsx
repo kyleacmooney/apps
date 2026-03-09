@@ -9,10 +9,13 @@ export function RouteRestorer() {
   const navigate = useNavigate()
   const restoringRef = useRef(false)
 
+  // Build the full path including search params
+  const fullPath = location.pathname + location.search
+
   // On mount, restore the last saved route
   useEffect(() => {
     const savedRoute = localStorage.getItem(ROUTE_KEY)
-    if (savedRoute && savedRoute !== '/' && savedRoute !== location.pathname) {
+    if (savedRoute && savedRoute !== '/' && savedRoute !== fullPath) {
       restoringRef.current = true
       navigate(savedRoute, { replace: true })
     }
@@ -21,6 +24,7 @@ export function RouteRestorer() {
   }, [])
 
   // After navigating to the restored route, restore scroll position
+  // Uses polling to wait for content to render (React Query data may load async)
   useEffect(() => {
     if (!restoringRef.current) return
     restoringRef.current = false
@@ -28,20 +32,27 @@ export function RouteRestorer() {
     const savedScroll = localStorage.getItem(SCROLL_KEY)
     if (!savedScroll) return
     const y = parseInt(savedScroll, 10)
-    if (isNaN(y)) return
+    if (isNaN(y) || y === 0) return
 
-    // Wait for React Query data to render before scrolling
-    const raf = requestAnimationFrame(() => {
-      const timeout = setTimeout(() => window.scrollTo(0, y), 100)
-      return () => clearTimeout(timeout)
-    })
-    return () => cancelAnimationFrame(raf)
+    // Poll until the document is tall enough to scroll to the saved position,
+    // or give up after 3 seconds
+    let attempts = 0
+    const maxAttempts = 30
+    const interval = setInterval(() => {
+      attempts++
+      if (document.documentElement.scrollHeight >= y + window.innerHeight || attempts >= maxAttempts) {
+        clearInterval(interval)
+        window.scrollTo(0, y)
+      }
+    }, 100)
+
+    return () => clearInterval(interval)
   }, [location.pathname])
 
-  // Persist route on every navigation
+  // Persist route on every navigation (including search params)
   useEffect(() => {
-    localStorage.setItem(ROUTE_KEY, location.pathname)
-  }, [location.pathname])
+    localStorage.setItem(ROUTE_KEY, fullPath)
+  }, [fullPath])
 
   // Persist scroll position periodically and on visibility change
   useEffect(() => {

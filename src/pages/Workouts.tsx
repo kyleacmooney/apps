@@ -282,8 +282,9 @@ function SessionCard({
   onToggleSession: () => void
   isHighlighted?: boolean
 }) {
-  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<string>>(
-    () => isDeepLinked ? new Set(session.workout_exercises.map((e) => e.id)) : new Set()
+  const [expandedExerciseIds, setExpandedExerciseIds] = usePersistedState<Set<string>>(
+    `workouts:exerciseIds:${session.id}`,
+    isDeepLinked ? new Set(session.workout_exercises.map((e) => e.id)) : new Set()
   )
   const [highlighted, setHighlighted] = useState(false)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -541,16 +542,26 @@ function CalendarView({
   onDateSelect: (date: string | null) => void
 }) {
   const queryClient = useQueryClient()
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    if (initialDate) {
-      const [y, m] = initialDate.split("-").map(Number)
-      return new Date(y, m - 1, 1)
+  const [currentMonthStr, setCurrentMonthStr] = usePersistedState<string>(
+    'workouts:calendarMonth',
+    () => {
+      if (initialDate) {
+        const [y, m] = initialDate.split("-").map(Number)
+        return `${y}-${m}`
+      }
+      const now = new Date()
+      return `${now.getFullYear()}-${now.getMonth()}`
     }
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), 1)
-  })
-  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate)
-  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set())
+  )
+  const currentMonth = useMemo(() => {
+    const [y, m] = currentMonthStr.split("-").map(Number)
+    return new Date(y, m, 1)
+  }, [currentMonthStr])
+  const setCurrentMonth = useCallback((d: Date) => {
+    setCurrentMonthStr(`${d.getFullYear()}-${d.getMonth()}`)
+  }, [setCurrentMonthStr])
+  const [selectedDate, setSelectedDate] = usePersistedState<string | null>('workouts:calendarDate', initialDate)
+  const [expandedSessionIds, setExpandedSessionIds] = usePersistedState<Set<string>>('workouts:calendarExpandedIds', new Set())
 
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()

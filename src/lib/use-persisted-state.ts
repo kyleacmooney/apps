@@ -19,16 +19,19 @@ function deserialize<T>(raw: string, _defaultValue: T): T {
  */
 export function usePersistedState<T>(
   key: string,
-  defaultValue: T
+  defaultValue: T | (() => T)
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
   const prefixedKey = `ps:${key}`
 
   const [value, setValueRaw] = useState<T>(() => {
+    const resolvedDefault = typeof defaultValue === 'function'
+      ? (defaultValue as () => T)()
+      : defaultValue
     try {
       const stored = localStorage.getItem(prefixedKey)
-      return stored !== null ? deserialize<T>(stored, defaultValue) : defaultValue
+      return stored !== null ? deserialize<T>(stored, resolvedDefault) : resolvedDefault
     } catch {
-      return defaultValue
+      return resolvedDefault
     }
   })
 
