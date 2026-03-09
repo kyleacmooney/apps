@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { useNavigate, useSearchParams, Link } from "react-router-dom"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { supabase } from "@/lib/supabase"
+import { useDataClient } from "@/context/SupabaseContext"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, parseLocalDate, type TrendSet } from "@/lib/workout-utils"
 import { ArrowLeft, ArrowRight, Search, ChevronDown, ChevronRight, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw, Home } from "lucide-react"
@@ -531,6 +531,7 @@ function CategoryFilterRow({
 }
 
 export function Exercises() {
+  const supabase = useDataClient()
   const canGoForward = useCanGoForward()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()

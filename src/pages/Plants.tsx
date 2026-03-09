@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { usePersistedState } from '@/lib/use-persisted-state'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { useDataClient } from '@/context/SupabaseContext'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
 import { computeDefaultSchedules } from '@/lib/plant-care-algorithm'
@@ -279,9 +279,11 @@ function AddPlantDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   rooms: Room[]
+
   userId: string
   onSuccess: () => void
 }) {
+  const supabase = useDataClient()
   const queryClient = useQueryClient()
 
   // Form state (persisted so partial input survives iOS app suspension)
@@ -598,6 +600,7 @@ function RoomDialog({
   userId: string
   existingRooms: Room[]
 }) {
+  const supabase = useDataClient()
   const queryClient = useQueryClient()
   const [name, setName] = useState(room?.name ?? '')
   const [error, setError] = useState('')
@@ -720,6 +723,7 @@ function PlantDetailSheet({
   onClose: () => void
   rooms: Room[]
 }) {
+  const supabase = useDataClient()
   const queryClient = useQueryClient()
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null)
   const [editInterval, setEditInterval] = useState('')
@@ -1100,6 +1104,7 @@ function PlantDetailSheet({
 // ─── Main Plants Component ──────────────────────────────────
 
 export function Plants() {
+  const supabase = useDataClient()
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const userId = user?.id ?? ''

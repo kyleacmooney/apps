@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
-import { supabase } from "@/lib/supabase"
+import { useDataClient } from "@/context/SupabaseContext"
 import { formatSet, parseLocalDate, getWeekStartStr, getWeekLabel, type TrendSet } from "@/lib/workout-utils"
 import { ArrowLeft, ArrowRight, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X, Home } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -518,12 +518,12 @@ function formatDateStr(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
 }
 
-async function fetchMonth(y: number, m: number): Promise<WorkoutSession[]> {
+async function fetchMonth(client: import('@supabase/supabase-js').SupabaseClient, y: number, m: number): Promise<WorkoutSession[]> {
   const firstDay = formatDateStr(y, m, 1)
   const lastDayNum = new Date(y, m + 1, 0).getDate()
   const lastDay = formatDateStr(y, m, lastDayNum)
 
-  const { data } = await supabase
+  const { data } = await client
     .from("workout_sessions")
     .select(SESSION_SELECT)
     .eq("status", "completed")
@@ -541,6 +541,7 @@ function CalendarView({
   initialDate: string | null
   onDateSelect: (date: string | null) => void
 }) {
+  const supabase = useDataClient()
   const queryClient = useQueryClient()
   const [currentMonthStr, setCurrentMonthStr] = usePersistedState<string>(
     'workouts:calendarMonth',
@@ -568,7 +569,7 @@ function CalendarView({
 
   const monthQuery = useQuery({
     queryKey: ['workouts', 'calendar', year, month],
-    queryFn: () => fetchMonth(year, month),
+    queryFn: () => fetchMonth(supabase, year, month),
   })
 
   const sessions = monthQuery.data ?? []
@@ -590,7 +591,7 @@ function CalendarView({
       const adj = new Date(year, month + offset, 1)
       queryClient.prefetchQuery({
         queryKey: ['workouts', 'calendar', adj.getFullYear(), adj.getMonth()],
-        queryFn: () => fetchMonth(adj.getFullYear(), adj.getMonth()),
+        queryFn: () => fetchMonth(supabase, adj.getFullYear(), adj.getMonth()),
       })
     }
   }, [year, month, queryClient])
@@ -739,6 +740,7 @@ function PlannedWorkoutCard({
   session: WorkoutSession
   onDismiss: () => void
 }) {
+  const supabase = useDataClient()
   const allExerciseIds = useMemo(
     () => new Set(session.workout_exercises.map((e) => e.id)),
     [session.workout_exercises]
@@ -862,6 +864,7 @@ const PAGE_SIZE = 30
 const SESSION_TYPES = ["all", "workout", "mobility", "mixed"] as const
 
 export function Workouts() {
+  const supabase = useDataClient()
   const [expandedSessionIds, setExpandedSessionIds] = usePersistedState<Set<string>>('workouts:expandedIds', new Set())
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()

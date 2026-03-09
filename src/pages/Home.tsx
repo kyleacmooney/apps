@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
-import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout } from "lucide-react"
+import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings } from "lucide-react"
 
 export function Home() {
   const { user, signIn, signOut } = useAuth()
@@ -90,6 +90,21 @@ export function Home() {
               Care schedules & tracking
             </p>
           </Link>
+
+          {user && (
+            <Link
+              to="/settings"
+              className="group block p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-border-hover transition-all duration-200 no-underline"
+            >
+              <Settings className="w-8 h-8 text-text-muted mb-3 group-hover:scale-110 transition-transform" />
+              <h2 className="text-lg font-semibold text-text-primary mb-1">
+                Settings
+              </h2>
+              <p className="text-text-muted text-sm">
+                Backend & configuration
+              </p>
+            </Link>
+          )}
         </div>
       </div>
     </div>

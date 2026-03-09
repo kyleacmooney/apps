@@ -23,6 +23,7 @@ src/
   lib/categories.ts            # Exercise category colors and utilities
   lib/workout-utils.ts         # Workout formatting helpers (set display, relative dates)
   context/AuthContext.tsx       # Google OAuth provider, useAuth() hook
+  context/SupabaseContext.tsx   # Dynamic Supabase client — useDataClient() for data queries, useSupabaseSettings() for config
   components/ProtectedRoute.tsx # Redirects to login if unauthenticated
   lib/plant-types.ts           # TypeScript interfaces for plant domain
   lib/plant-care-algorithm.ts  # Smart watering interval computation
@@ -34,6 +35,7 @@ src/
   pages/Exercises.tsx          # Exercise encyclopedia with search/filters
   pages/Workouts.tsx           # Workout session history
   pages/Plants.tsx             # Plant care tracker (first write-capable feature)
+  pages/Settings.tsx           # Backend configuration — connect your own Supabase project
 docs/
   workout-logging-instructions.md  # Claude.ai prompt for logging workouts to Supabase
   plant-care-instructions.md       # Claude.ai prompt for researching plants + updating Supabase
@@ -48,7 +50,8 @@ supabase/
 
 - **HashRouter** — routes are `/#/path`, avoids GitHub Pages 404 issues with client-side routing
 - **Supabase anon key is public** — hardcoded in `lib/supabase.ts`, safe because Row Level Security on tables enforces access control
-- **Auth flow:** `useAuth()` hook provides `user`, `signIn`, `signOut`. Wrap routes in `<ProtectedRoute>` to require login
+- **Auth flow:** `useAuth()` hook provides `user`, `signIn`, `signOut`. Wrap routes in `<ProtectedRoute>` to require login. Auth always uses the shared Supabase (Kyle's).
+- **Dynamic data client:** All data queries use `useDataClient()` from `SupabaseContext` — returns the shared Supabase client by default, or a user's own Supabase client if configured in Settings. Never import `supabase` directly in page components; always use the hook. `useSupabaseSettings()` provides `saveExternalBackend()`, `clearExternalBackend()`, and connection state.
 - **Adding a new page:** Create `src/pages/NewPage.tsx`, add a `<Route>` in `App.tsx`, optionally wrap in `<ProtectedRoute>`
 - **Vite base path** is `/apps/` (matches the GitHub repo name for correct asset resolution on GitHub Pages)
 - **Tailwind CSS v4** — utility-first styling via `@tailwindcss/vite` plugin, dark theme colors defined in `src/index.css`
@@ -63,7 +66,8 @@ supabase/
 - Project: `claude-managed` (ID: `svmjtlsdyghxilpcdywc`)
 - Auth: Google OAuth
 - **Multi-user:** All tables have `user_id` columns with RLS policies enforcing `auth.uid() = user_id`. Views use `security_invoker = true` so RLS applies to the calling user. Exercises are per-user (unique constraint on `(user_id, name)`). `workout_exercises` and `workout_sets` inherit user scoping via FK chain to `workout_sessions`.
-- Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles` — all RLS-enabled
+- Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles`, `user_settings` — all RLS-enabled
+- **`user_settings`:** Stores per-user external Supabase config (`external_supabase_url`, `external_supabase_anon_key`). Always on the shared Supabase, never on a user's external project. One row per user via unique constraint on `user_id`.
 - Edge Functions: `proxy-image-upload` (downloads external image URLs and self-hosts them in Supabase Storage, updating `species_profiles.image_url`)
 - Storage: `plant-photos` bucket (public read) — stores species reference images under `species/` and user-uploaded plant photos
 - `species_profiles` is the primary source of species data, populated by Claude.ai via `docs/plant-care-instructions.md`
