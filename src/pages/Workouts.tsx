@@ -281,7 +281,9 @@ function SessionCard({
   onToggleSession: () => void
   isHighlighted?: boolean
 }) {
-  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<string>>(new Set())
+  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<string>>(
+    () => isDeepLinked ? new Set(session.workout_exercises.map((e) => e.id)) : new Set()
+  )
   const [highlighted, setHighlighted] = useState(false)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const exercises = session.workout_exercises
