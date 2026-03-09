@@ -1,18 +1,43 @@
-import { Link, useNavigate } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings } from "@/context/SupabaseContext"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings, Database, X } from "lucide-react"
 
+const WELCOME_SESSION_KEY = 'home-welcome-seen-session'
+
 export function Home() {
   const { user, signIn, signOut } = useAuth()
   const { isExternalBackend, settingsLoading } = useSupabaseSettings()
   const welcomeKey = user ? `home-welcome-dismissed:${user.id}` : 'home-welcome-dismissed:guest'
   const [welcomeDismissed, setWelcomeDismissed] = usePersistedState(welcomeKey, false)
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const canGoForward = useCanGoForward()
   const showSetupCard = user && !settingsLoading && !isExternalBackend
+
+  // Show banner at most once per session (so refresh doesn't show it again)
+  const [showBannerThisSession] = useState(
+    () => typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(WELCOME_SESSION_KEY)
+  )
+  useEffect(() => {
+    if (user && !welcomeDismissed && showBannerThisSession) {
+      sessionStorage.setItem(WELCOME_SESSION_KEY, '1')
+    }
+  }, [user, welcomeDismissed, showBannerThisSession])
+
+  // "Show intro again" from Settings or link: clear dismissal and force banner to show
+  const [forceShowBanner, setForceShowBanner] = useState(false)
+  useEffect(() => {
+    if (searchParams.get('showIntro') === '1') {
+      setWelcomeDismissed(false)
+      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(WELCOME_SESSION_KEY)
+      setForceShowBanner(true)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams, setWelcomeDismissed])
 
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col">
@@ -57,8 +82,8 @@ export function Home() {
         </h1>
         <p className="text-text-muted text-sm mb-6">Personal tools</p>
 
-        {/* Welcome banner (new users) */}
-        {user && !welcomeDismissed && (
+        {/* Welcome banner: once per session, or when user asks to see intro again */}
+        {user && !welcomeDismissed && (showBannerThisSession || forceShowBanner) && (
           <div className="w-full max-w-md mb-6 rounded-xl border border-upper-pull-border bg-upper-pull-bg/30 px-4 py-3 relative">
             <button
               type="button"

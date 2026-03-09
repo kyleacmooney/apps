@@ -120,65 +120,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return window.google
   }
 
+  const signInWithOAuth = () => {
+    supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + window.location.pathname + window.location.search + window.location.hash,
+      },
+    })
+  }
+
   const signIn = async () => {
-    // Fallback to Supabase's OAuth flow if a Google client ID is not configured.
+    // Use OAuth redirect when no client ID (e.g. build without env) or as fallback when GIS fails (e.g. incognito).
     if (!GOOGLE_CLIENT_ID) {
-      await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin + window.location.pathname,
-        },
-      })
+      await signInWithOAuth()
       return
     }
 
-    const google = await loadGoogleIdentityScript()
+    try {
+      const google = await loadGoogleIdentityScript()
 
-    if (!google?.accounts?.id) {
-      throw new Error('Google Identity Services not available in this browser.')
-    }
+      if (!google?.accounts?.id) {
+        await signInWithOAuth()
+        return
+      }
 
-    const [nonce, hashedNonce] = await generateNonce()
+      const [nonce, hashedNonce] = await generateNonce()
 
-    await new Promise<void>((resolve, reject) => {
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        auto_select: false,
-        nonce: hashedNonce,
-        callback: async (response: { credential?: string }) => {
-          try {
-            const token = response.credential
-            if (!token) {
-              reject(new Error('No ID token returned from Google.'))
-              return
+      await new Promise<void>((resolve, reject) => {
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          auto_select: false,
+          nonce: hashedNonce,
+          callback: async (response: { credential?: string }) => {
+            try {
+              const token = response.credential
+              if (!token) {
+                reject(new Error('No ID token returned from Google.'))
+                return
+              }
+
+              setIdToken(token)
+
+              const { error } = await supabase.auth.signInWithIdToken({
+                provider: 'google',
+                token,
+                nonce,
+              })
+
+              if (error) {
+                reject(error)
+                return
+              }
+
+              resolve()
+            } catch (err) {
+              reject(err instanceof Error ? err : new Error('Failed to sign in with Google.'))
             }
+          },
+        })
 
-            setIdToken(token)
-
-            const { error } = await supabase.auth.signInWithIdToken({
-              provider: 'google',
-              token,
-              nonce,
-            })
-
-            if (error) {
-              reject(error)
-              return
-            }
-
-            resolve()
-          } catch (err) {
-            reject(err instanceof Error ? err : new Error('Failed to sign in with Google.'))
+        google.accounts.id.prompt((notification: any) => {
+          if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
+            reject(new Error('Google sign-in was cancelled or could not be displayed.'))
           }
-        },
+        })
       })
-
-      google.accounts.id.prompt((notification: any) => {
-        if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
-          reject(new Error('Google sign-in was cancelled or could not be displayed.'))
-        }
-      })
-    })
+    } catch {
+      // GIS failed or prompt didn't show (e.g. incognito, third-party cookies blocked). Use redirect flow.
+      signInWithOAuth()
+    }
   }
 
   const signOut = async () => {

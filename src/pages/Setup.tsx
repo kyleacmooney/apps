@@ -110,19 +110,32 @@ export function Setup() {
       <div className="border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
         <div className="max-w-lg mx-auto px-5 pt-4 pb-4">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/')}
-              className="text-text-muted hover:text-text-primary transition-colors"
-              aria-label="Home"
-            >
-              <Home className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => (step > 1 ? setStep(step - 1) : navigate(-1))}
-              className="text-text-muted hover:text-text-primary transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+            {step === 1 ? (
+              <>
+                <button
+                  onClick={() => navigate('/')}
+                  className="text-text-muted hover:text-text-primary transition-colors"
+                  aria-label="Home"
+                >
+                  <Home className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => navigate(-1)}
+                  className="text-text-muted hover:text-text-primary transition-colors"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => navigate('/')}
+                className="text-text-muted hover:text-text-primary transition-colors"
+                aria-label="Home"
+              >
+                <Home className="w-4 h-4" />
+              </button>
+            )}
             <div>
               <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
                 Set up your backend
@@ -425,8 +438,22 @@ export function Setup() {
           </div>
         )}
 
-        {/* Next / Finish */}
-        <div className="mt-8 flex justify-end">
+        {/* Back / Next row at bottom */}
+        <div className="mt-8 flex items-center justify-between gap-3">
+          {step > 1 ? (
+            <button
+              onClick={() => setStep(step - 1)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium',
+                'border-border-default bg-bg-secondary text-text-primary hover:border-border-hover'
+              )}
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+          ) : (
+            <span />
+          )}
           {step < STEPS.length ? (
             <button
               onClick={() => setStep(step + 1)}

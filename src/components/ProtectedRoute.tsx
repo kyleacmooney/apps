@@ -1,8 +1,10 @@
 import type { ReactNode } from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
-import { LogIn } from "lucide-react"
+import { LogIn, ArrowLeft } from "lucide-react"
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
+  const navigate = useNavigate()
   const { user, loading, signIn } = useAuth()
 
   // In dev mode, skip auth to allow visual testing of protected pages
@@ -23,7 +25,14 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-bg-primary flex items-center justify-center p-5">
+      <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-5">
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-2 text-text-muted hover:text-text-primary transition-colors text-sm font-medium mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to home
+        </button>
         <div className="bg-bg-secondary border border-border-default rounded-xl p-8 max-w-sm text-center">
           <p className="text-text-secondary text-sm mb-4">
             Sign in to access this page.

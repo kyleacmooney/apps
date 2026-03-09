@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { createClient } from '@supabase/supabase-js'
 import { useSupabaseSettings } from '@/context/SupabaseContext'
 import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert } from 'lucide-react'
@@ -329,6 +329,17 @@ export function Settings() {
         <p className="text-text-dim text-[11px] mt-4 text-center">
           The anon key is a <span className="text-text-muted">publishable</span> key — safe to store.
           Your project's service role key is never needed.
+        </p>
+
+        {/* Show intro again */}
+        <p className="text-text-dim text-[11px] mt-6 text-center">
+          <Link
+            to="/?showIntro=1"
+            className="text-text-muted hover:text-text-primary transition-colors underline"
+          >
+            Show intro again
+          </Link>
+          {' — what this app does and how to use Claude with Supabase.'}
         </p>
       </div>
     </div>
