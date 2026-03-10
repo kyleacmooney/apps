@@ -35,6 +35,7 @@ src/
   pages/Exercises.tsx          # Exercise encyclopedia with search/filters
   pages/Workouts.tsx           # Workout session history
   pages/Plants.tsx             # Plant care tracker (first write-capable feature)
+  pages/Todos.tsx              # Daily life task manager — full CRUD with categories, priorities, recurring tasks
   pages/Settings.tsx           # Backend configuration — connect your own Supabase project
   pages/Chat.tsx               # In-app AI chat — streams Claude responses via edge function
 docs/
@@ -69,7 +70,7 @@ supabase/
 - Project: `claude-managed` (ID: `svmjtlsdyghxilpcdywc`)
 - Auth: Google OAuth
 - **Multi-user:** All tables have `user_id` columns with RLS policies enforcing `auth.uid() = user_id`. Views use `security_invoker = true` so RLS applies to the calling user. Exercises are per-user (unique constraint on `(user_id, name)`). `workout_exercises` and `workout_sets` inherit user scoping via FK chain to `workout_sessions`.
-- Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles`, `user_settings` — all RLS-enabled
+- Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles`, `user_settings`, `todos` — all RLS-enabled
 - **`user_settings`:** Stores per-user external Supabase config (`external_supabase_url`, `external_supabase_anon_key`). Always on the shared Supabase, never on a user's external project. One row per user via unique constraint on `user_id`.
 - Edge Functions: `proxy-image-upload` (downloads external image URLs and self-hosts them in Supabase Storage, updating `species_profiles.image_url`), `chat` (available but unused — the Chat page calls the Anthropic API directly from the browser instead)
 - **AI Chat:** The in-app AI chat (`pages/Chat.tsx`) calls the Anthropic API directly from the browser using a Claude Code OAuth token stored in `localStorage`. The token never touches the shared Supabase — it goes straight from the user's browser to `api.anthropic.com`. Users configure their token in Settings. Headers: `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`, `anthropic-dangerous-direct-browser-access: true`.
