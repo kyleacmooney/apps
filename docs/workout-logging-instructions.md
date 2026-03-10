@@ -17,7 +17,7 @@ Instructions for Claude.ai to log workout sessions to the Supabase database (pro
 
 ### `workout_exercises` — one row per exercise in the session
 
-- `session_id` (FK), `exercise_id` (FK to exercises table, nullable — only link if the exercise exists in the encyclopedia), `exercise_name` (text, always populated), `section` (enum: warmup/main/accessory/cooldown), `position` (smallint — ordering within session, sequential starting at 1), `notes` (text, nullable)
+- `session_id` (FK), `exercise_id` (FK to exercises table, nullable at the schema level, but for any real encyclopedia exercise you should ensure the row exists and set it), `exercise_name` (text, always populated, and should exactly match `exercises.name` when linked), `section` (enum: warmup/main/accessory/cooldown), `position` (smallint — ordering within session, sequential starting at 1), `notes` (text, nullable)
 
 ### `workout_sets` — one row per set
 
@@ -25,16 +25,21 @@ Instructions for Claude.ai to log workout sessions to the Supabase database (pro
 
 ## Key rules
 
-- Query the `exercises` table first to get current IDs for linking `exercise_id` where applicable — always filter by the current user's `user_id`
-- Use nullable fields appropriately: reps-only exercises (pushups, dead bugs) have NULL weight/duration; timed exercises (hangs, wall sits) have NULL reps; carries have both duration and weight; stretches in cooldown may have no sets at all
-- Flag PRs with `is_pr = true` and add context in set-level `notes`
-- For exercise names that begin with `Assisted ` (for example `Assisted Pull-Up`), lower weight is better because the logged weight is assistance. Treat the least-assisted successful set as the PR candidate, not the heaviest assistance.
+- Query the `exercises` table first to get current IDs for linking `exercise_id` — always filter by the current user's `user_id`
+- For anything that should appear in the exercise encyclopedia/trend history, make sure an `exercises` row exists first, set `workout_exercises.exercise_id`, and keep `workout_exercises.exercise_name` text identical to `exercises.name`
+- Use nullable fields appropriately: reps-only exercises (pushups, dead bugs) have NULL weight/duration; timed exercises (hangs, wall sits) have NULL reps; carries have both duration and weight; stretches/mobility blocks may have no sets at all
+- `set_number` should be contiguous and start at 1 within each exercise block
+- Flag `is_pr = true` only on sets you want the current Exercises UI to surface as the exercise's headline PR; the UI prioritizes the most recent flagged PR by date, not an independent all-time-strength calculation
+- Assisted movements that use assistance weight must use an exercise name that begins with `Assisted ` (for example `Assisted Pull-Up`). That prefix is the naming contract that tells the summary view lower weight is better.
+- For exercise names that begin with `Assisted `, lower weight is better because the logged weight is assistance. Treat the least-assisted successful set as the PR candidate, not the heaviest assistance.
 - For drop sets like "9 @ 75 + 3 @ 67.5", create two separate set rows with sequential set_numbers and note "drop set" on the second
 - For bilateral exercises like pallof press, note "each side" in set notes
 - Session `notes` should contain the summary/takeaways paragraph
 - Always use year 2026 for dates (not 2025)
 - Use 'workout' only when the session's primary purpose is structured lifting/training. If the primary purpose is mobility/stretches and only includes a minor exercise component (e.g., a quick baseline test, a single accessory movement), use 'mixed' instead.
 - "mixed" is only for non-workout combos (e.g., standalone grip + mobility in one session).
+- `grip_training` and `sitting_practice` are valid session types, but the current Workouts UI styles them generically compared with `workout`, `mobility`, and `mixed`
+- The current Workouts UI only renders `warmup`, `main`, and `accessory` sections. Avoid `cooldown` for now if the user expects the block to be visible in the current app; use `accessory` and clarify cooldown/stretch intent in notes instead.
 - Ask about both `energy_level` and `body_state` at the start or end of each session. Both are nullable — skip if the person doesn't volunteer it.
 - At the end of each workout session, ask for an energy_rating (1–10) reflecting how the person felt during the session (also nullable).
 
@@ -54,9 +59,10 @@ When logging a workout, if an exercise (including stretches and mobility work) d
 
 - Add all exercises including stretches and mobility work — stretches go under 'Mobility & Posture' category
 - Always include `user_id` when inserting exercises
+- Use canonical encyclopedia names. If the movement uses assistance weight, name it with the exact `Assisted ` prefix (for example `Assisted Pull-Up`) so the PR logic treats lower weight as better.
 - Populate `form_cues` with the key cues discussed during the session
 - Populate `common_mistakes` if any form issues came up during the session
-- Populate `current_working` with the weight/rep ranges from the current session (e.g. "3×15 @ 15lb" or "bodyweight, 5 reps"); for stretches, note hold duration (e.g. "30s each side")
+- Populate `current_working` with short, literal, user-facing weight/rep ranges from the current session (e.g. "3×15 @ 15lb" or "bodyweight, 5 reps"); for stretches, note hold duration (e.g. "30s each side")
 - For assisted exercises, make it explicit in `current_working` and set notes that the number is assistance (for example `12@70 assist, 9@55 assist, 7@55 assist`) so lower weight is not misread as weaker performance.
 - Populate `personal_notes` with any shoulder/grip/asymmetry notes specific to the user
 - `progression` can be filled in if a clear next step was discussed, otherwise leave NULL
@@ -70,6 +76,8 @@ When logging a workout, if an exercise (including stretches and mobility work) d
 
 When the user wants to plan their next workout, insert into the same 3 tables with `status = 'planned'`.
 
+Current app caveat: planned sessions are not filtered out of the exercise summary/trend views yet, so they can affect Exercise Encyclopedia session counts, "Last performed", and recent-set previews. Replace an existing plan instead of appending, keep planned sets realistic, and never mark planned sets as PRs.
+
 ### Key differences from logging a completed session
 
 - Set `status` to `'planned'` on the `workout_sessions` insert
@@ -80,7 +88,7 @@ When the user wants to plan their next workout, insert into the same 3 tables wi
 - `notes` can include the plan's intent/focus (e.g., "Focus on progressive overload for rows")
 - Sets should use target weights/reps (what the user intends to hit)
 - `is_pr` should always be false for planned sets
-- Only one planned session should exist at a time per user — if a previous plan exists, delete it first (`DELETE FROM workout_sessions WHERE status = 'planned' AND user_id = auth.uid()`, CASCADE FKs handle child rows)
+- Only one planned session should exist at a time per user — replace, don't append. If a previous plan exists, delete it first (`DELETE FROM workout_sessions WHERE status = 'planned' AND user_id = auth.uid()`, CASCADE FKs handle child rows)
 
 ### Example
 
