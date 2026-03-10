@@ -61,6 +61,7 @@ supabase/
 - **Category colors** — defined as Tailwind theme variables in `index.css`, mapped to class names in `lib/categories.ts`
 - **State persistence for PWA** — this app must feel native on iPhone. Use `usePersistedState` (from `lib/use-persisted-state.ts`) instead of `useState` for any user-facing UI state that should survive iOS app suspensions: expanded items, active tabs, filters, selections, dialog open states, and **form inputs** (so partial progress isn't lost). Route + scroll position are handled by `RouteRestorer`. Only use regular `useState` for truly transient state like loading spinners, animation flags, and debounce timers. When a form is submitted or explicitly cancelled, reset persisted fields to defaults (the setter from `usePersistedState` writes through to localStorage automatically).
 - **Path alias** — `@/` maps to `src/` (configured in vite.config.ts and tsconfig)
+- **Exercise PR summaries** — the `exercise_summary` view ranks weight PRs by heavier-is-better for normal lifts, but for exercise names beginning with `Assisted ` it treats lower weight as better because the weight represents assistance, not load
 
 ## Supabase
 

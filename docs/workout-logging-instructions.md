@@ -28,6 +28,7 @@ Instructions for Claude.ai to log workout sessions to the Supabase database (pro
 - Query the `exercises` table first to get current IDs for linking `exercise_id` where applicable — always filter by the current user's `user_id`
 - Use nullable fields appropriately: reps-only exercises (pushups, dead bugs) have NULL weight/duration; timed exercises (hangs, wall sits) have NULL reps; carries have both duration and weight; stretches in cooldown may have no sets at all
 - Flag PRs with `is_pr = true` and add context in set-level `notes`
+- For exercise names that begin with `Assisted ` (for example `Assisted Pull-Up`), lower weight is better because the logged weight is assistance. Treat the least-assisted successful set as the PR candidate, not the heaviest assistance.
 - For drop sets like "9 @ 75 + 3 @ 67.5", create two separate set rows with sequential set_numbers and note "drop set" on the second
 - For bilateral exercises like pallof press, note "each side" in set notes
 - Session `notes` should contain the summary/takeaways paragraph
@@ -56,6 +57,7 @@ When logging a workout, if an exercise (including stretches and mobility work) d
 - Populate `form_cues` with the key cues discussed during the session
 - Populate `common_mistakes` if any form issues came up during the session
 - Populate `current_working` with the weight/rep ranges from the current session (e.g. "3×15 @ 15lb" or "bodyweight, 5 reps"); for stretches, note hold duration (e.g. "30s each side")
+- For assisted exercises, make it explicit in `current_working` and set notes that the number is assistance (for example `12@70 assist, 9@55 assist, 7@55 assist`) so lower weight is not misread as weaker performance.
 - Populate `personal_notes` with any shoulder/grip/asymmetry notes specific to the user
 - `progression` can be filled in if a clear next step was discussed, otherwise leave NULL
 - After inserting, use the new ID to link `exercise_id` in the workout log
