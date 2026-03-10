@@ -12,6 +12,7 @@ import { Plants } from './pages/Plants'
 import { Settings } from './pages/Settings'
 import { Setup } from './pages/Setup'
 import { Chat } from './pages/Chat'
+import { Todos } from './pages/Todos'
 
 export function App() {
   return (
@@ -59,6 +60,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <Setup />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/todos"
+            element={
+              <ProtectedRoute>
+                <Todos />
               </ProtectedRoute>
             }
           />
