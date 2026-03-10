@@ -4,7 +4,8 @@ import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings } from "@/context/SupabaseContext"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { usePersistedState } from "@/lib/use-persisted-state"
-import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings, Database, X, Sparkles } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings, Database, X, Check, Sparkles } from "lucide-react"
 
 const WELCOME_SESSION_KEY = 'home-welcome-seen-session'
 
@@ -42,7 +43,21 @@ export function Home() {
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col">
       {/* Auth bar */}
-      <div className="flex items-center justify-end gap-3 p-4">
+      <div className="flex items-center justify-end gap-3 p-4 flex-wrap">
+        {user && !settingsLoading && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md",
+              isExternalBackend
+                ? "bg-lower-bg/50 text-lower border border-lower-border"
+                : "bg-bg-elevated text-text-muted border border-border-default"
+            )}
+            title={isExternalBackend ? "Using your Supabase project" : "Using the shared backend — you're already connected"}
+          >
+            <Check className="w-3.5 h-3.5 shrink-0" />
+            {isExternalBackend ? "Your backend" : "Connected"}
+          </span>
+        )}
         {user ? (
           <>
             <span className="text-text-muted text-sm font-mono truncate max-w-48">
@@ -99,6 +114,12 @@ export function Home() {
           </div>
         )}
 
+        {user && !settingsLoading && !isExternalBackend && (
+          <p className="text-text-muted text-sm mb-4 w-full max-w-md text-center">
+            You're connected — using the shared backend. No setup needed.
+          </p>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md">
           {showSetupCard && (
             <Link
@@ -107,10 +128,10 @@ export function Home() {
             >
               <Database className="w-8 h-8 text-lower mb-3 group-hover:scale-110 transition-transform" />
               <h2 className="text-lg font-semibold text-text-primary mb-1">
-                Set up your backend
+                Set up your own backend
               </h2>
               <p className="text-text-muted text-sm">
-                Use your own Supabase project & connect Claude via MCP
+                Optional — use your own Supabase project & connect Claude via MCP
               </p>
             </Link>
           )}

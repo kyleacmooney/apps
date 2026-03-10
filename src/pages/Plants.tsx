@@ -33,7 +33,6 @@ import {
   Plus,
   RefreshCw,
   Check,
-  SkipForward,
   Sprout,
   ChevronRight,
   X,
@@ -45,6 +44,7 @@ import {
   Camera,
   Loader2,
   Undo2,
+  MoreHorizontal,
 } from 'lucide-react'
 import {
   Dialog,
@@ -53,6 +53,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Select,
   SelectContent,
@@ -194,21 +200,37 @@ function TodoCard({
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         <button
-          onClick={onSkip}
-          disabled={isPending}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-text-dim hover:text-text-muted hover:bg-bg-elevated transition-colors cursor-pointer"
-          title="Skip"
-        >
-          <SkipForward className="w-3.5 h-3.5" />
-        </button>
-        <button
           onClick={onDone}
           disabled={isPending}
-          className="w-8 h-8 rounded-lg flex items-center justify-center bg-plant/15 text-plant hover:bg-plant/25 transition-colors cursor-pointer"
-          title="Done"
+          className="h-8 rounded-lg px-3 flex items-center justify-center gap-1.5 bg-plant/15 text-plant hover:bg-plant/25 transition-colors cursor-pointer text-xs font-medium"
+          title="Mark care as done"
         >
-          <Check className="w-4 h-4" />
+          <Check className="w-3.5 h-3.5" />
+          <span>Done</span>
         </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-text-dim hover:text-text-muted hover:bg-bg-elevated transition-colors cursor-pointer data-[state=open]:bg-bg-elevated"
+            aria-label="More actions"
+            disabled={isPending}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="bg-bg-elevated border-border-default text-text-primary"
+          >
+            <DropdownMenuItem
+              className="text-sm text-text-secondary"
+              onSelect={(event) => {
+                event.preventDefault()
+                if (!isPending) onSkip()
+              }}
+            >
+              Skip today
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )
