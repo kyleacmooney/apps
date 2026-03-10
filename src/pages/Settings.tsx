@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { createClient } from '@supabase/supabase-js'
 import { useAuth } from '@/context/AuthContext'
 import { useSupabaseSettings } from '@/context/SupabaseContext'
-import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock } from 'lucide-react'
+import { getClaudeOAuthToken, setClaudeOAuthToken, clearClaudeOAuthToken } from '@/pages/Chat'
+import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock, Sparkles, Eye, EyeOff, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
@@ -367,6 +368,9 @@ export function Settings() {
           Your project's service role key is never needed.
         </p>
 
+        {/* AI Chat Token */}
+        <AIChatTokenSection />
+
         {/* Show intro again */}
         <p className="text-text-dim text-[11px] mt-6 text-center">
           <Link
@@ -378,6 +382,124 @@ export function Settings() {
           {' — what this app does and how to use Claude with Supabase.'}
         </p>
       </div>
+    </div>
+  )
+}
+
+function AIChatTokenSection() {
+  const [tokenInput, setTokenInput] = useState('')
+  const [showToken, setShowToken] = useState(false)
+  const [hasToken, setHasToken] = useState(() => !!getClaudeOAuthToken())
+  const [saved, setSaved] = useState(false)
+
+  const maskedToken = hasToken
+    ? (() => {
+        const t = getClaudeOAuthToken()
+        if (!t) return '••••••••'
+        return t.length > 12 ? `${t.slice(0, 6)}••••${t.slice(-4)}` : '••••••••'
+      })()
+    : null
+
+  function handleSave() {
+    const trimmed = tokenInput.trim()
+    if (!trimmed) return
+    setClaudeOAuthToken(trimmed)
+    setTokenInput('')
+    setHasToken(true)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  function handleClear() {
+    clearClaudeOAuthToken()
+    setHasToken(false)
+    setTokenInput('')
+  }
+
+  return (
+    <div className="rounded-xl border border-border-default bg-bg-secondary p-4 mt-6">
+      <div className="flex items-center gap-2.5 mb-1.5">
+        <Sparkles className="w-5 h-5 text-ai" />
+        <span className="text-sm font-semibold text-text-primary">AI Chat</span>
+      </div>
+      <p className="text-text-muted text-xs ml-[30px] mb-3">
+        Add your Claude OAuth token to enable in-app AI chat. Get one by running{' '}
+        <code className="px-1 py-0.5 rounded bg-bg-primary text-ai text-[11px] font-mono">claude config get oauthToken</code>{' '}
+        in your terminal (requires{' '}
+        <a
+          href="https://docs.anthropic.com/en/docs/claude-code/overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-upper-pull hover:underline inline-flex items-center gap-0.5"
+        >
+          Claude Code <ExternalLink className="w-3 h-3" />
+        </a>
+        ).
+      </p>
+
+      {hasToken && (
+        <div className="ml-[30px] mb-3 flex items-center gap-2">
+          <span className={cn(
+            'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+            'bg-ai-bg text-ai border border-ai-border'
+          )}>
+            <Check className="w-3.5 h-3.5" />
+            Token configured
+          </span>
+          <button
+            onClick={() => setShowToken((s) => !s)}
+            className="text-text-dim hover:text-text-muted transition-colors"
+            title={showToken ? 'Hide token' : 'Show token'}
+          >
+            {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      )}
+
+      {hasToken && showToken && (
+        <div className="ml-[30px] mb-3">
+          <span className="text-text-dim text-[11px] font-mono break-all">{maskedToken}</span>
+        </div>
+      )}
+
+      <div className="ml-[30px] flex flex-col gap-2">
+        <input
+          type="password"
+          value={tokenInput}
+          onChange={(e) => setTokenInput(e.target.value)}
+          placeholder={hasToken ? 'Paste new token to replace' : 'Paste your OAuth token'}
+          className="w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-ai-border transition-colors"
+        />
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={!tokenInput.trim()}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer',
+              'border-ai-border bg-ai-bg text-ai hover:bg-ai-tag',
+              !tokenInput.trim() && 'opacity-40 cursor-not-allowed'
+            )}
+          >
+            {saved ? <Check className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+            {saved ? 'Saved!' : hasToken ? 'Update' : 'Save'}
+          </button>
+
+          {hasToken && (
+            <button
+              onClick={handleClear}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer border-border-default bg-bg-primary text-text-muted hover:text-upper-push hover:border-upper-push-border"
+            >
+              <Trash2 className="w-4 h-4" />
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className="text-text-dim text-[11px] ml-[30px] mt-3">
+        Stored only in your browser's localStorage — never sent to our servers. Calls go directly from your browser to the Anthropic API.
+      </p>
     </div>
   )
 }

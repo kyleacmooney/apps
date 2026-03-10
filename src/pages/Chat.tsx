@@ -1,10 +1,29 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
-import { Home, Send, Trash2, Square, Sparkles, User, AlertCircle } from "lucide-react"
+import { Home, Send, Trash2, Square, Sparkles, User, AlertCircle, Settings } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { usePersistedState } from "@/lib/use-persisted-state"
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase"
-import { supabase } from "@/lib/supabase"
+
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+const OAUTH_TOKEN_KEY = "claude-oauth-token"
+
+const SYSTEM_PROMPT = [
+  "You are a helpful AI assistant embedded in a personal tools app.",
+  "You help the user with their workouts, exercises, plant care, and other life management tasks.",
+  "Be concise and friendly. Use markdown formatting when helpful.",
+].join(" ")
+
+export function getClaudeOAuthToken(): string | null {
+  return localStorage.getItem(OAUTH_TOKEN_KEY)
+}
+
+export function setClaudeOAuthToken(token: string) {
+  localStorage.setItem(OAUTH_TOKEN_KEY, token)
+}
+
+export function clearClaudeOAuthToken() {
+  localStorage.removeItem(OAUTH_TOKEN_KEY)
+}
 
 interface ChatMessage {
   id: string
@@ -28,6 +47,7 @@ function parseSSEStream(
     buffer = lines.pop() ?? ""
 
     for (const line of lines) {
+      if (line.startsWith("event: ")) continue
       if (!line.startsWith("data: ")) continue
       const data = line.slice(6).trim()
       if (data === "[DONE]") continue
@@ -75,10 +95,15 @@ export function Chat() {
   const [input, setInput] = usePersistedState(`chat-input:${userId}`, "")
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasToken, setHasToken] = useState(() => !!getClaudeOAuthToken())
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    setHasToken(!!getClaudeOAuthToken())
+  }, [])
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -95,6 +120,12 @@ export function Chat() {
   const sendMessage = useCallback(async () => {
     const trimmed = input.trim()
     if (!trimmed || isStreaming) return
+
+    const token = getClaudeOAuthToken()
+    if (!token) {
+      setError("No Claude OAuth token configured. Add one in Settings → AI Chat.")
+      return
+    }
 
     setError(null)
     const userMsg: ChatMessage = {
@@ -120,47 +151,45 @@ export function Chat() {
     abortRef.current = abortController
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const accessToken = session?.access_token
-
-      if (!accessToken) {
-        setError("Not authenticated. Please sign in.")
-        setMessages(updatedMessages)
-        setIsStreaming(false)
-        return
-      }
-
       const apiMessages = updatedMessages.map((m) => ({
         role: m.role,
         content: m.content,
       }))
 
-      const response = await fetch(
-        `${SUPABASE_URL}/functions/v1/chat`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-            apikey: SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({ messages: apiMessages }),
-          signal: abortController.signal,
+      const response = await fetch(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": "oauth-2025-04-20",
+          "anthropic-dangerous-direct-browser-access": "true",
         },
-      )
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4096,
+          system: SYSTEM_PROMPT,
+          messages: apiMessages,
+          stream: true,
+        }),
+        signal: abortController.signal,
+      })
 
       if (!response.ok) {
-        const body = await response.json().catch(() => ({}))
-        throw new Error(
-          body.error ?? `Request failed: ${response.status}`,
-        )
+        const body = await response.text()
+        let errorMsg = `API error: ${response.status}`
+        try {
+          const parsed = JSON.parse(body)
+          errorMsg = parsed.error?.message ?? errorMsg
+        } catch { /* use default */ }
+
+        if (response.status === 401) {
+          errorMsg = "Invalid or expired OAuth token. Update it in Settings → AI Chat."
+        }
+        throw new Error(errorMsg)
       }
 
-      if (!response.body) {
-        throw new Error("No response stream")
-      }
+      if (!response.body) throw new Error("No response stream")
 
       const reader = response.body.getReader()
 
@@ -243,7 +272,28 @@ export function Chat() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && !hasToken && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-16">
+            <div className="w-16 h-16 rounded-2xl bg-ai-bg border border-ai-border flex items-center justify-center mb-4">
+              <Sparkles className="w-8 h-8 text-ai" />
+            </div>
+            <h2 className="text-xl font-semibold text-text-primary mb-2">
+              Set up AI Chat
+            </h2>
+            <p className="text-text-muted text-sm max-w-xs mb-4">
+              Add your Claude OAuth token in Settings to start chatting. Your token stays on your device — it's never sent to our servers.
+            </p>
+            <Link
+              to="/settings"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-ai text-white text-sm font-medium hover:brightness-110 transition-all no-underline"
+            >
+              <Settings className="w-4 h-4" />
+              Open Settings
+            </Link>
+          </div>
+        )}
+
+        {messages.length === 0 && hasToken && (
           <div className="flex-1 flex flex-col items-center justify-center text-center py-20">
             <div className="w-16 h-16 rounded-2xl bg-ai-bg border border-ai-border flex items-center justify-center mb-4">
               <Sparkles className="w-8 h-8 text-ai" />
@@ -310,10 +360,10 @@ export function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything..."
+            placeholder={hasToken ? "Ask anything..." : "Set up token in Settings first"}
             rows={1}
             className="flex-1 resize-none rounded-xl border border-border-default bg-bg-primary px-4 py-2.5 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-ai-border transition-colors field-sizing-content max-h-32"
-            disabled={isStreaming}
+            disabled={isStreaming || !hasToken}
           />
           {isStreaming ? (
             <button
@@ -326,7 +376,7 @@ export function Chat() {
           ) : (
             <button
               onClick={sendMessage}
-              disabled={!input.trim()}
+              disabled={!input.trim() || !hasToken}
               className="shrink-0 w-10 h-10 rounded-xl bg-ai flex items-center justify-center text-white disabled:opacity-30 disabled:cursor-not-allowed hover:brightness-110 transition-all"
               title="Send message"
             >
