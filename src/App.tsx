@@ -11,6 +11,7 @@ import { Workouts } from './pages/Workouts'
 import { Plants } from './pages/Plants'
 import { Settings } from './pages/Settings'
 import { Setup } from './pages/Setup'
+import { Chat } from './pages/Chat'
 
 export function App() {
   return (
@@ -58,6 +59,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <Setup />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <Chat />
               </ProtectedRoute>
             }
           />

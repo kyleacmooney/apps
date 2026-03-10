@@ -70,6 +70,11 @@
   --color-care-clean: #f9a8d4;
   --color-care-prune: #86efac;
 
+  --color-ai: #a78bfa;
+  --color-ai-bg: #1a1430;
+  --color-ai-border: #6d4daa;
+  --color-ai-tag: #1e0e30;
+
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
 }

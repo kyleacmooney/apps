@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings } from "@/context/SupabaseContext"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { usePersistedState } from "@/lib/use-persisted-state"
-import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings, Database, X } from "lucide-react"
+import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings, Database, X, Sparkles } from "lucide-react"
 
 const WELCOME_SESSION_KEY = 'home-welcome-seen-session'
 
@@ -150,6 +150,19 @@ export function Home() {
             </h2>
             <p className="text-text-muted text-sm">
               Care schedules & tracking
+            </p>
+          </Link>
+
+          <Link
+            to="/chat"
+            className="group block p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-ai-border transition-all duration-200 no-underline"
+          >
+            <Sparkles className="w-8 h-8 text-ai mb-3 group-hover:scale-110 transition-transform" />
+            <h2 className="text-lg font-semibold text-text-primary mb-1">
+              AI Chat
+            </h2>
+            <p className="text-text-muted text-sm">
+              Ask questions & get help
             </p>
           </Link>
 

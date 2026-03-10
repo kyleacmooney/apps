@@ -36,6 +36,7 @@ src/
   pages/Workouts.tsx           # Workout session history
   pages/Plants.tsx             # Plant care tracker (first write-capable feature)
   pages/Settings.tsx           # Backend configuration — connect your own Supabase project
+  pages/Chat.tsx               # In-app AI chat — streams Claude responses via edge function
 docs/
   workout-logging-instructions.md  # Claude.ai prompt for logging workouts to Supabase
   plant-care-instructions.md       # Claude.ai prompt for researching plants + updating Supabase
@@ -44,6 +45,7 @@ supabase/
   migrations/                      # All DDL migrations (applied via MCP or CLI)
   functions/                       # Edge function source code (one dir per function)
     proxy-image-upload/index.ts    # Downloads external images → Supabase Storage
+    chat/index.ts                  # AI chat — proxies streaming Claude API calls via OAuth token
 ```
 
 ## Key Patterns
@@ -68,7 +70,7 @@ supabase/
 - **Multi-user:** All tables have `user_id` columns with RLS policies enforcing `auth.uid() = user_id`. Views use `security_invoker = true` so RLS applies to the calling user. Exercises are per-user (unique constraint on `(user_id, name)`). `workout_exercises` and `workout_sets` inherit user scoping via FK chain to `workout_sessions`.
 - Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles`, `user_settings` — all RLS-enabled
 - **`user_settings`:** Stores per-user external Supabase config (`external_supabase_url`, `external_supabase_anon_key`). Always on the shared Supabase, never on a user's external project. One row per user via unique constraint on `user_id`.
-- Edge Functions: `proxy-image-upload` (downloads external image URLs and self-hosts them in Supabase Storage, updating `species_profiles.image_url`)
+- Edge Functions: `proxy-image-upload` (downloads external image URLs and self-hosts them in Supabase Storage, updating `species_profiles.image_url`), `chat` (proxies streaming Claude API calls using `CLAUDE_CODE_OAUTH_TOKEN` secret with Bearer auth + `anthropic-beta: oauth-2025-04-20` header)
 - Storage: `plant-photos` bucket (public read) — stores species reference images under `species/` and user-uploaded plant photos
 - `species_profiles` is the primary source of species data, populated by Claude.ai via `docs/plant-care-instructions.md`
 - **Workout logging instructions** (used in Claude.ai conversations): [`docs/workout-logging-instructions.md`](docs/workout-logging-instructions.md)
