@@ -18,6 +18,10 @@ interface ChatRequest {
   messages: ChatMessage[];
   system?: string;
   context?: string;
+  /** User's Claude OAuth token; when provided, used instead of CLAUDE_CODE_OAUTH_TOKEN (avoids CORS) */
+  oauth_token?: string;
+  model?: string;
+  max_tokens?: number;
 }
 
 async function verifyAuth(req: Request): Promise<string | null> {
@@ -49,19 +53,24 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const oauthToken = Deno.env.get("CLAUDE_CODE_OAUTH_TOKEN");
-  if (!oauthToken) {
-    return new Response(
-      JSON.stringify({ error: "CLAUDE_CODE_OAUTH_TOKEN not configured" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  }
-
   try {
-    const { messages, system, context } = (await req.json()) as ChatRequest;
+    const body = (await req.json()) as ChatRequest;
+    const { messages, system, context, oauth_token: userOAuthToken, model, max_tokens } = body;
+
+    const oauthToken = userOAuthToken ?? Deno.env.get("CLAUDE_CODE_OAUTH_TOKEN");
+    if (!oauthToken) {
+      return new Response(
+        JSON.stringify({
+          error: userOAuthToken
+            ? "Invalid or expired OAuth token. Update it in Settings → AI Chat."
+            : "CLAUDE_CODE_OAUTH_TOKEN not configured",
+        }),
+        {
+          status: userOAuthToken ? 401 : 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
@@ -90,11 +99,10 @@ Deno.serve(async (req: Request) => {
         Authorization: `Bearer ${oauthToken}`,
         "anthropic-version": "2023-06-01",
         "anthropic-beta": "oauth-2025-04-20",
-        "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2048,
+        model: model ?? "claude-sonnet-4-20250514",
+        max_tokens: max_tokens ?? 2048,
         system: systemPrompt,
         messages: messages.map((m) => ({
           role: m.role,

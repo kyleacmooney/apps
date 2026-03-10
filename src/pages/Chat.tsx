@@ -3,8 +3,9 @@ import { Link } from "react-router-dom"
 import { Home, Send, Trash2, Square, Sparkles, User, AlertCircle, Settings } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { usePersistedState } from "@/lib/use-persisted-state"
+import { SUPABASE_URL } from "@/lib/supabase"
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+const CHAT_EDGE_URL = `${SUPABASE_URL}/functions/v1/chat`
 const OAUTH_TOKEN_KEY = "claude-oauth-token"
 
 const SYSTEM_PROMPT = [
@@ -85,7 +86,7 @@ function parseSSEStream(
 }
 
 export function Chat() {
-  const { user } = useAuth()
+  const { user, session } = useAuth()
   const userId = user?.id ?? "guest"
 
   const [messages, setMessages] = usePersistedState<ChatMessage[]>(
@@ -126,6 +127,10 @@ export function Chat() {
       setError("No Claude OAuth token configured. Add one in Settings → AI Chat.")
       return
     }
+    if (!session?.access_token) {
+      setError("Sign in to use AI Chat.")
+      return
+    }
 
     setError(null)
     const userMsg: ChatMessage = {
@@ -156,31 +161,29 @@ export function Chat() {
         content: m.content,
       }))
 
-      const response = await fetch(ANTHROPIC_API_URL, {
+      // Proxy via Supabase edge to avoid Anthropic "CORS not allowed for this Organization" when calling from the browser
+      const response = await fetch(CHAT_EDGE_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "anthropic-version": "2023-06-01",
-          "anthropic-beta": "oauth-2025-04-20",
-          "anthropic-dangerous-direct-browser-access": "true",
+          Authorization: `Bearer ${session!.access_token}`,
         },
         body: JSON.stringify({
+          messages: apiMessages,
+          system: SYSTEM_PROMPT,
+          oauth_token: token,
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
-          system: SYSTEM_PROMPT,
-          messages: apiMessages,
-          stream: true,
         }),
         signal: abortController.signal,
       })
 
       if (!response.ok) {
-        const body = await response.text()
+        const resBody = await response.text()
         let errorMsg = `API error: ${response.status}`
         try {
-          const parsed = JSON.parse(body)
-          errorMsg = parsed.error?.message ?? errorMsg
+          const parsed = JSON.parse(resBody)
+          errorMsg = parsed.error ?? errorMsg
         } catch { /* use default */ }
 
         if (response.status === 401) {
@@ -226,7 +229,7 @@ export function Chat() {
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [input, isStreaming, messages, setMessages, setInput])
+  }, [input, isStreaming, messages, setMessages, setInput, session])
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort()
