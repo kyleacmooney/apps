@@ -6,3 +6,4 @@ dist
 *.local
 whats-next.md
 .claude/worktrees
+.cursor
