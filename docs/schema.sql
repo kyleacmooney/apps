@@ -242,7 +242,15 @@ SELECT e.id AS exercise_id,
              JOIN workout_exercises pr_we ON ((pr_s.workout_exercise_id = pr_we.id)))
              JOIN workout_sessions pr_ws ON ((pr_we.session_id = pr_ws.id)))
           WHERE ((pr_we.exercise_id = e.id) AND (pr_s.is_pr = true))
-          ORDER BY pr_ws.date DESC
+          ORDER BY pr_ws.date DESC,
+            CASE
+              WHEN lower(e.name) LIKE 'assisted %' THEN pr_s.weight
+            END ASC NULLS LAST,
+            CASE
+              WHEN lower(e.name) NOT LIKE 'assisted %' THEN pr_s.weight
+            END DESC NULLS LAST,
+            pr_s.reps DESC NULLS LAST,
+            pr_s.set_number DESC
          LIMIT 1) AS latest_pr,
     max(s.duration_seconds) AS best_duration_seconds,
     max(s.weight) AS max_weight,
@@ -250,7 +258,14 @@ SELECT e.id AS exercise_id,
            FROM (workout_sets bw_s
              JOIN workout_exercises bw_we ON ((bw_s.workout_exercise_id = bw_we.id)))
           WHERE ((bw_we.exercise_id = e.id) AND (bw_s.weight IS NOT NULL))
-          ORDER BY bw_s.weight DESC, bw_s.reps DESC NULLS LAST
+          ORDER BY CASE
+              WHEN lower(e.name) LIKE 'assisted %' THEN bw_s.weight
+            END ASC NULLS LAST,
+            CASE
+              WHEN lower(e.name) NOT LIKE 'assisted %' THEN bw_s.weight
+            END DESC NULLS LAST,
+            bw_s.reps DESC NULLS LAST,
+            bw_s.set_number DESC
          LIMIT 1) AS best_weight_set
    FROM (((exercises e
      LEFT JOIN workout_exercises we ON ((we.exercise_id = e.id)))
