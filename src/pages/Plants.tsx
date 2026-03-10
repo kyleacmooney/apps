@@ -44,6 +44,7 @@ import {
   Home,
   Camera,
   Loader2,
+  Undo2,
 } from 'lucide-react'
 import {
   Dialog,
@@ -61,7 +62,6 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 
 // ─── Query select strings ──────────────────────────────────────
@@ -91,6 +91,33 @@ function addDaysStr(days: number): string {
   const d = new Date()
   d.setDate(d.getDate() + days)
   return d.toISOString().split('T')[0]
+}
+
+function getRelativeDateLabel(dateStr: string): string {
+  const date = new Date(dateStr)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  const diff = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Yesterday'
+  if (diff < 7) return d.toLocaleDateString('en-US', { weekday: 'long' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+interface HistoryLogEntry {
+  id: string
+  care_type: CareType
+  status: string
+  performed_at: string
+  plant_id: string
+  plants: {
+    id: string
+    nickname: string
+    species_thumbnail_url: string | null
+    is_archived: boolean
+  }
 }
 
 function resizeImage(file: File, maxSize: number): Promise<Blob> {
@@ -859,6 +886,47 @@ function PlantDetailSheet({
     },
   })
 
+  const undoCareLog = useMutation({
+    mutationFn: async ({ logId, careType }: { logId: string; careType: CareType }) => {
+      await supabase.from('care_logs').delete().eq('id', logId)
+
+      const { data: schedule } = await supabase
+        .from('care_schedules')
+        .select('id, interval_days')
+        .eq('plant_id', plant!.id)
+        .eq('care_type', careType)
+        .single()
+      if (!schedule) return
+
+      const { data: lastLog } = await supabase
+        .from('care_logs')
+        .select('performed_at')
+        .eq('plant_id', plant!.id)
+        .eq('care_type', careType)
+        .order('performed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const newNextDue = lastLog
+        ? (() => {
+            const d = new Date(lastLog.performed_at)
+            d.setDate(d.getDate() + schedule.interval_days)
+            return d.toISOString().split('T')[0]
+          })()
+        : todayStr()
+
+      await supabase
+        .from('care_schedules')
+        .update({ next_due: newNextDue, updated_at: new Date().toISOString() })
+        .eq('id', schedule.id)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants', 'todo'] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-logs'] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-schedules'] })
+    },
+  })
+
   if (!plant) return null
 
   return (
@@ -920,7 +988,7 @@ function PlantDetailSheet({
             </button>
           </div>
           {/* Plant info chips */}
-          <div className="flex flex-wrap gap-1.5 mt-3">
+          <div className="flex flex-wrap items-center gap-1.5 mt-3">
             <Select
               value={plant.room_id ?? '__none__'}
               onValueChange={(v) => updateRoom.mutate(v === '__none__' ? null : v)}
@@ -939,17 +1007,17 @@ function PlantDetailSheet({
               </SelectContent>
             </Select>
             {plant.pot_material && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted capitalize">
+              <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted capitalize">
                 {plant.pot_material}
               </span>
             )}
             {plant.pot_size && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted capitalize">
+              <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted capitalize">
                 {plant.pot_size}
               </span>
             )}
             {plant.light_level && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted">
+              <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted capitalize">
                 {plant.light_level.replace('_', ' ')}
               </span>
             )}
@@ -992,7 +1060,7 @@ function PlantDetailSheet({
                 const Icon = config.icon
                 const isEditing = editingSchedule === schedule.id
                 return (
-                  <div key={schedule.id} className="flex items-center gap-3 py-1.5">
+                  <div key={schedule.id} className={cn('flex items-center gap-3 py-1.5', !schedule.is_enabled && 'opacity-40')}>
                     <div className={cn('w-7 h-7 rounded-md flex items-center justify-center', config.bgColor)}>
                       <Icon className={cn('w-3.5 h-3.5', config.color)} />
                     </div>
@@ -1041,13 +1109,17 @@ function PlantDetailSheet({
                         </button>
                       )}
                     </div>
-                    <Switch
-                      checked={schedule.is_enabled}
-                      onCheckedChange={(checked) =>
-                        toggleEnabled.mutate({ scheduleId: schedule.id, enabled: checked })
-                      }
-                      className="data-[state=checked]:bg-plant"
-                    />
+                    <button
+                      onClick={() => toggleEnabled.mutate({ scheduleId: schedule.id, enabled: !schedule.is_enabled })}
+                      className={cn(
+                        'text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer shrink-0',
+                        schedule.is_enabled
+                          ? 'bg-plant/15 text-plant'
+                          : 'bg-bg-elevated text-text-dim',
+                      )}
+                    >
+                      {schedule.is_enabled ? 'Active' : 'Paused'}
+                    </button>
                   </div>
                 )
               })}
@@ -1060,13 +1132,13 @@ function PlantDetailSheet({
             {logs.length === 0 ? (
               <p className="text-sm text-text-dim">No care logged yet</p>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {logs.map((log) => {
                   const config = CARE_TYPE_CONFIG[log.care_type]
                   const Icon = config.icon
                   const date = new Date(log.performed_at)
                   return (
-                    <div key={log.id} className="flex items-center gap-2.5 py-1">
+                    <div key={log.id} className="flex items-center gap-2.5 py-1.5">
                       <Icon className={cn('w-3.5 h-3.5 shrink-0', config.color)} />
                       <span className="text-xs text-text-secondary flex-1">
                         {config.label}
@@ -1077,6 +1149,14 @@ function PlantDetailSheet({
                       <span className="text-xs font-mono text-text-dim">
                         {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </span>
+                      <button
+                        onClick={() => undoCareLog.mutate({ logId: log.id, careType: log.care_type })}
+                        disabled={undoCareLog.isPending}
+                        className="w-6 h-6 rounded flex items-center justify-center text-text-dim hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer shrink-0"
+                        title="Undo"
+                      >
+                        <Undo2 className="w-3 h-3" />
+                      </button>
                     </div>
                   )
                 })}
@@ -1085,7 +1165,7 @@ function PlantDetailSheet({
           </div>
 
           {/* Actions */}
-          <div className="px-5 py-4">
+          <div className="px-5 pt-4 pb-10">
             <button
               onClick={() => archivePlant.mutate()}
               disabled={archivePlant.isPending}
@@ -1124,6 +1204,15 @@ export function Plants() {
 
   // Optimistic: track items being marked done/skipped
   const [pendingCareIds, setPendingCareIds] = useState<Set<string>>(new Set())
+
+  // Undo toast state
+  const [undoInfo, setUndoInfo] = useState<{
+    careLogId: string
+    scheduleId: string
+    previousNextDue: string
+    label: string
+  } | null>(null)
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     clearTimeout(sheetTimerRef.current)
@@ -1191,6 +1280,23 @@ export function Plants() {
     },
   })
 
+  const { data: historyLogs = [], isLoading: historyLoading } = useQuery({
+    queryKey: ['plants', 'care-logs', 'all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('care_logs')
+        .select(`
+          id, care_type, status, performed_at, plant_id,
+          plants!inner (id, nickname, species_thumbnail_url, is_archived)
+        `)
+        .order('performed_at', { ascending: false })
+        .limit(50)
+      if (error) throw error
+      return ((data ?? []) as unknown as HistoryLogEntry[]).filter((log) => !log.plants.is_archived)
+    },
+    enabled: activeTab === 'history',
+  })
+
   // ─── Mutations ──────────────────────────────────────
 
   const logCare = useMutation({
@@ -1199,22 +1305,24 @@ export function Plants() {
       plantId,
       careType,
       status,
+      previousNextDue,
+      plantNickname,
     }: {
       scheduleId: string
       plantId: string
       careType: CareType
       status: 'done' | 'skipped'
+      previousNextDue: string
+      plantNickname: string
     }) => {
-      // Insert log
-      const { error: logErr } = await supabase.from('care_logs').insert({
+      const { data: logData, error: logErr } = await supabase.from('care_logs').insert({
         user_id: userId,
         plant_id: plantId,
         care_type: careType,
         status,
-      })
+      }).select('id').single()
       if (logErr) throw logErr
 
-      // Get interval
       const { data: schedule } = await supabase
         .from('care_schedules')
         .select('interval_days')
@@ -1225,7 +1333,6 @@ export function Plants() {
       const nextDue = new Date()
       nextDue.setDate(nextDue.getDate() + intervalDays)
 
-      // Update next_due
       const { error: updateErr } = await supabase
         .from('care_schedules')
         .update({
@@ -1234,6 +1341,20 @@ export function Plants() {
         })
         .eq('id', scheduleId)
       if (updateErr) throw updateErr
+
+      return { careLogId: logData.id, scheduleId, previousNextDue, plantNickname, careType }
+    },
+    onSuccess: (result) => {
+      if (result) {
+        clearTimeout(undoTimerRef.current)
+        setUndoInfo({
+          careLogId: result.careLogId,
+          scheduleId: result.scheduleId,
+          previousNextDue: result.previousNextDue,
+          label: `${CARE_TYPE_CONFIG[result.careType].label} · ${result.plantNickname}`,
+        })
+        undoTimerRef.current = setTimeout(() => setUndoInfo(null), 5000)
+      }
     },
     onMutate: ({ scheduleId }) => {
       setPendingCareIds((prev) => new Set(prev).add(scheduleId))
@@ -1249,6 +1370,92 @@ export function Plants() {
       queryClient.invalidateQueries({ queryKey: ['plants', 'care-schedules'] })
     },
   })
+
+  const undoCare = useMutation({
+    mutationFn: async ({ careLogId, scheduleId, previousNextDue }: {
+      careLogId: string
+      scheduleId: string
+      previousNextDue: string
+    }) => {
+      await supabase.from('care_logs').delete().eq('id', careLogId)
+      await supabase
+        .from('care_schedules')
+        .update({ next_due: previousNextDue, updated_at: new Date().toISOString() })
+        .eq('id', scheduleId)
+    },
+    onSuccess: () => {
+      clearTimeout(undoTimerRef.current)
+      setUndoInfo(null)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants', 'todo'] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-logs'] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-schedules'] })
+    },
+  })
+
+  const undoHistoryLog = useMutation({
+    mutationFn: async ({ logId, plantId, careType }: { logId: string; plantId: string; careType: CareType }) => {
+      await supabase.from('care_logs').delete().eq('id', logId)
+
+      const { data: schedule } = await supabase
+        .from('care_schedules')
+        .select('id, interval_days')
+        .eq('plant_id', plantId)
+        .eq('care_type', careType)
+        .single()
+      if (!schedule) return
+
+      const { data: lastLog } = await supabase
+        .from('care_logs')
+        .select('performed_at')
+        .eq('plant_id', plantId)
+        .eq('care_type', careType)
+        .order('performed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const newNextDue = lastLog
+        ? (() => {
+            const d = new Date(lastLog.performed_at)
+            d.setDate(d.getDate() + schedule.interval_days)
+            return d.toISOString().split('T')[0]
+          })()
+        : todayStr()
+
+      await supabase
+        .from('care_schedules')
+        .update({ next_due: newNextDue, updated_at: new Date().toISOString() })
+        .eq('id', schedule.id)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['plants', 'todo'] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-logs'] })
+      queryClient.invalidateQueries({ queryKey: ['plants', 'care-schedules'] })
+    },
+  })
+
+  function handleCareDone(item: TodoItem) {
+    logCare.mutate({
+      scheduleId: item.id,
+      plantId: item.plants.id,
+      careType: item.care_type,
+      status: 'done',
+      previousNextDue: item.next_due,
+      plantNickname: item.plants.nickname,
+    })
+  }
+
+  function handleCareSkip(item: TodoItem) {
+    logCare.mutate({
+      scheduleId: item.id,
+      plantId: item.plants.id,
+      careType: item.care_type,
+      status: 'skipped',
+      previousNextDue: item.next_due,
+      plantNickname: item.plants.nickname,
+    })
+  }
 
   // ─── Derived data ──────────────────────────────────────
 
@@ -1276,6 +1483,20 @@ export function Plants() {
     return grouped
   }, [plants])
 
+  const historyGrouped = useMemo(() => {
+    const groups: { label: string; logs: HistoryLogEntry[] }[] = []
+    let currentLabel = ''
+    for (const log of historyLogs) {
+      const label = getRelativeDateLabel(log.performed_at)
+      if (label !== currentLabel) {
+        currentLabel = label
+        groups.push({ label, logs: [] })
+      }
+      groups[groups.length - 1].logs.push(log)
+    }
+    return groups
+  }, [historyLogs])
+
   const selectedPlant = useMemo(
     () => plants.find((p) => p.id === sheetMountedId) ?? null,
     [plants, sheetMountedId],
@@ -1292,7 +1513,7 @@ export function Plants() {
 
   // ─── Loading state ──────────────────────────────────
 
-  const isLoading = activeTab === 'todo' ? todoLoading : plantsLoading
+  const isLoading = activeTab === 'todo' ? todoLoading : activeTab === 'my-plants' ? plantsLoading : historyLoading
 
   if (isLoading && !todoItems.length && !plants.length) {
     return (
@@ -1374,6 +1595,17 @@ export function Plants() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={cn(
+                'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
+                activeTab === 'history'
+                  ? 'bg-bg-secondary text-text-primary shadow-sm'
+                  : 'text-text-dim hover:text-text-muted',
+              )}
+            >
+              History
+            </button>
           </div>
         </div>
       </div>
@@ -1406,22 +1638,8 @@ export function Plants() {
                         key={item.id}
                         item={item}
                         isPending={pendingCareIds.has(item.id)}
-                        onDone={() =>
-                          logCare.mutate({
-                            scheduleId: item.id,
-                            plantId: item.plants.id,
-                            careType: item.care_type,
-                            status: 'done',
-                          })
-                        }
-                        onSkip={() =>
-                          logCare.mutate({
-                            scheduleId: item.id,
-                            plantId: item.plants.id,
-                            careType: item.care_type,
-                            status: 'skipped',
-                          })
-                        }
+                        onDone={() => handleCareDone(item)}
+                        onSkip={() => handleCareSkip(item)}
                       />
                     ))}
                   </div>
@@ -1436,22 +1654,8 @@ export function Plants() {
                         key={item.id}
                         item={item}
                         isPending={pendingCareIds.has(item.id)}
-                        onDone={() =>
-                          logCare.mutate({
-                            scheduleId: item.id,
-                            plantId: item.plants.id,
-                            careType: item.care_type,
-                            status: 'done',
-                          })
-                        }
-                        onSkip={() =>
-                          logCare.mutate({
-                            scheduleId: item.id,
-                            plantId: item.plants.id,
-                            careType: item.care_type,
-                            status: 'skipped',
-                          })
-                        }
+                        onDone={() => handleCareDone(item)}
+                        onSkip={() => handleCareSkip(item)}
                       />
                     ))}
                   </div>
@@ -1466,22 +1670,8 @@ export function Plants() {
                         key={item.id}
                         item={item}
                         isPending={pendingCareIds.has(item.id)}
-                        onDone={() =>
-                          logCare.mutate({
-                            scheduleId: item.id,
-                            plantId: item.plants.id,
-                            careType: item.care_type,
-                            status: 'done',
-                          })
-                        }
-                        onSkip={() =>
-                          logCare.mutate({
-                            scheduleId: item.id,
-                            plantId: item.plants.id,
-                            careType: item.care_type,
-                            status: 'skipped',
-                          })
-                        }
+                        onDone={() => handleCareDone(item)}
+                        onSkip={() => handleCareSkip(item)}
                       />
                     ))}
                   </div>
@@ -1548,7 +1738,82 @@ export function Plants() {
             )}
           </div>
         )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-5">
+            {historyLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-plant-bg flex items-center justify-center mb-4">
+                  <Undo2 className="w-8 h-8 text-plant" />
+                </div>
+                <p className="text-text-muted text-sm font-medium mb-1">No history yet</p>
+                <p className="text-text-dim text-xs">
+                  Care actions will appear here as you complete tasks
+                </p>
+              </div>
+            ) : (
+              historyGrouped.map((group) => (
+                <div key={group.label} className="space-y-2">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-text-dim px-1">
+                    {group.label}
+                  </h2>
+                  {group.logs.map((log) => {
+                    const config = CARE_TYPE_CONFIG[log.care_type]
+                    const Icon = config.icon
+                    const time = new Date(log.performed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    return (
+                      <div key={log.id} className="flex items-center gap-3 p-3 rounded-xl bg-bg-secondary border border-border-default">
+                        <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0', config.bgColor)}>
+                          <Icon className={cn('w-4.5 h-4.5', config.color)} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-text-primary truncate">
+                              {log.plants.nickname}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={cn('text-xs font-medium', config.color)}>{config.label}</span>
+                            {log.status === 'skipped' && (
+                              <span className="text-xs text-text-dim">(skipped)</span>
+                            )}
+                            <span className="text-xs text-text-dim">{time}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => undoHistoryLog.mutate({ logId: log.id, plantId: log.plant_id, careType: log.care_type })}
+                          disabled={undoHistoryLog.isPending}
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-text-dim hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer shrink-0"
+                          title="Undo"
+                        >
+                          <Undo2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Undo toast */}
+      {undoInfo && (
+        <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-5">
+          <div className="flex items-center gap-3 bg-bg-elevated border border-border-default rounded-xl px-4 py-3 shadow-lg">
+            <Check className="w-4 h-4 text-plant shrink-0" />
+            <span className="text-sm text-text-secondary">{undoInfo.label}</span>
+            <button
+              onClick={() => undoCare.mutate(undoInfo)}
+              disabled={undoCare.isPending}
+              className="text-sm font-medium text-plant hover:text-plant/80 transition-colors cursor-pointer ml-1"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Add Plant dialog */}
       <AddPlantDialog
