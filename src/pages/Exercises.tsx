@@ -664,6 +664,7 @@ export function Exercises() {
         .from("workout_sessions")
         .select("id, date, title, session_type")
         .in("id", sessionIds)
+        .neq("status", "planned")
         .order("date", { ascending: false })
       sessions = (data as SessionHistoryEntry[]) ?? []
     }

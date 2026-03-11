@@ -71,11 +71,12 @@ const SESSION_TYPE_STYLES: Record<string, string> = {
   mixed: "bg-session-mixed-bg text-session-mixed",
 }
 
-const SECTION_ORDER = ["warmup", "main", "accessory"] as const
+const SECTION_ORDER = ["warmup", "main", "accessory", "cooldown"] as const
 const SECTION_LABELS: Record<string, string> = {
   warmup: "Warmup",
   main: "Main",
   accessory: "Accessory",
+  cooldown: "Cooldown",
 }
 
 

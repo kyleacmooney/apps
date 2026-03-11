@@ -13,7 +13,7 @@ Instructions for Claude.ai to log workout sessions to the Supabase database (pro
 ### `workout_sessions` — one row per session
 
 - `user_id` (uuid FK to auth.users, NOT NULL — always set to the current user's ID)
-- `date` (date, use correct year — currently 2026), `time_of_day` (text: morning/afternoon/evening/night), `title` (text), `location` (text: 'apartment gym', 'LA Fitness', 'home'), `session_type` (enum: workout/mobility/grip_training/sitting_practice/mixed), `status` (session_status enum: completed/planned, default 'completed'), `energy_level` (energy_level enum: low/moderate/high/full_send, nullable), `energy_rating` (smallint 1–10, nullable — ask at end of session), `body_state` (body_state enum: fresh/sore/tight/beat_up/recovering, nullable), `notes` (text — overall takeaways, PRs, injuries)
+- `date` (date, use correct year — currently 2026), `time_of_day` (text: morning/afternoon/evening/night), `title` (text), `location` (text: 'apartment gym', 'LA Fitness', 'home'), `session_type` (enum: workout/mobility/mixed), `status` (session_status enum: completed/planned, default 'completed'), `energy_level` (energy_level enum: low/moderate/high/full_send, nullable), `energy_rating` (smallint 1–10, nullable — ask at end of session), `body_state` (body_state enum: fresh/sore/tight/beat_up/recovering, nullable), `notes` (text — overall takeaways, PRs, injuries)
 
 ### `workout_exercises` — one row per exercise in the session
 
@@ -29,7 +29,7 @@ Instructions for Claude.ai to log workout sessions to the Supabase database (pro
 - For anything that should appear in the exercise encyclopedia/trend history, make sure an `exercises` row exists first, set `workout_exercises.exercise_id`, and keep `workout_exercises.exercise_name` text identical to `exercises.name`
 - Use nullable fields appropriately: reps-only exercises (pushups, dead bugs) have NULL weight/duration; timed exercises (hangs, wall sits) have NULL reps; carries have both duration and weight; stretches/mobility blocks may have no sets at all
 - `set_number` should be contiguous and start at 1 within each exercise block
-- Flag `is_pr = true` only on sets you want the current Exercises UI to surface as the exercise's headline PR; the UI prioritizes the most recent flagged PR by date, not an independent all-time-strength calculation
+- Flag `is_pr = true` only on sets you want the current Exercises UI to surface as the exercise's headline PR; the UI shows your all-time best flagged PR (heaviest weight for regular exercises, least assistance for `Assisted ` exercises)
 - Assisted movements that use assistance weight must use an exercise name that begins with `Assisted ` (for example `Assisted Pull-Up`). That prefix is the naming contract that tells the summary view lower weight is better.
 - For exercise names that begin with `Assisted `, lower weight is better because the logged weight is assistance. Treat the least-assisted successful set as the PR candidate, not the heaviest assistance.
 - For drop sets like "9 @ 75 + 3 @ 67.5", create two separate set rows with sequential set_numbers and note "drop set" on the second
@@ -38,8 +38,6 @@ Instructions for Claude.ai to log workout sessions to the Supabase database (pro
 - Always use year 2026 for dates (not 2025)
 - Use 'workout' only when the session's primary purpose is structured lifting/training. If the primary purpose is mobility/stretches and only includes a minor exercise component (e.g., a quick baseline test, a single accessory movement), use 'mixed' instead.
 - "mixed" is only for non-workout combos (e.g., standalone grip + mobility in one session).
-- `grip_training` and `sitting_practice` are valid session types, but the current Workouts UI styles them generically compared with `workout`, `mobility`, and `mixed`
-- The current Workouts UI only renders `warmup`, `main`, and `accessory` sections. Avoid `cooldown` for now if the user expects the block to be visible in the current app; use `accessory` and clarify cooldown/stretch intent in notes instead.
 - Ask about both `energy_level` and `body_state` at the start or end of each session. Both are nullable — skip if the person doesn't volunteer it.
 - At the end of each workout session, ask for an energy_rating (1–10) reflecting how the person felt during the session (also nullable).
 
@@ -76,7 +74,7 @@ When logging a workout, if an exercise (including stretches and mobility work) d
 
 When the user wants to plan their next workout, insert into the same 3 tables with `status = 'planned'`.
 
-Current app caveat: planned sessions are not filtered out of the exercise summary/trend views yet, so they can affect Exercise Encyclopedia session counts, "Last performed", and recent-set previews. Replace an existing plan instead of appending, keep planned sets realistic, and never mark planned sets as PRs.
+Planned sessions are excluded from the Exercise Encyclopedia (session counts, "Last performed", and trend/set previews only include completed sessions). Replace an existing plan instead of appending, keep planned sets realistic, and never mark planned sets as PRs.
 
 ### Key differences from logging a completed session
 
