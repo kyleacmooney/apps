@@ -1,8 +1,8 @@
-name: Auto-merge Claude/Cursor branches
+name: Auto-merge Claude/Cursor/Codex branches
 
 on:
   push:
-    branches: ["claude/**", "cursor/**"]
+    branches: ["claude/**", "cursor/**", "codex/**"]
 
 permissions:
   contents: write

@@ -384,7 +384,7 @@ BEGIN
   EXECUTE format('SELECT ($1).%I::text', scope_col) INTO scope_val USING NEW;
 
   EXECUTE format(
-    'SELECT count(*)::integer FROM %I.%I WHERE %I = $1',
+    'SELECT count(*)::integer FROM %I.%I WHERE %I::text = $1',
     TG_TABLE_SCHEMA, TG_TABLE_NAME, scope_col
   ) INTO cur_count USING scope_val;
 
