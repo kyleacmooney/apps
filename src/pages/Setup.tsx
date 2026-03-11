@@ -39,7 +39,7 @@ type VerifyStatus = 'idle' | 'verifying' | 'success' | 'error'
 export function Setup() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { saveExternalBackend } = useSupabaseSettings()
+  const { saveExternalBackend, isExternalBackend, externalUrl, authMode } = useSupabaseSettings()
   // Scope persisted state to current user so credentials never leak across accounts on shared devices
   const storageKey = user ? `setup-wizard:${user.id}` : 'setup-wizard:guest'
   const [step, setStep] = usePersistedState(`${storageKey}:step`, 1)
@@ -165,9 +165,30 @@ export function Setup() {
       </div>
 
       <div className="max-w-lg mx-auto px-5 pb-10">
+        {/* Already-configured banner */}
+        {isExternalBackend && (
+          <div className="rounded-xl border border-lower-border bg-lower-bg/60 p-3 mb-5 flex items-start gap-2.5">
+            <Check className="w-4 h-4 text-lower shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-text-primary">Backend already connected</p>
+              <p className="text-text-dim text-[11px] font-mono break-all mt-0.5">{externalUrl}</p>
+              <p className="text-text-dim text-[11px] mt-1">
+                {authMode === 'external-authed' ? 'Authenticated (Secure)' : authMode === 'external-anon' ? 'Anon-only (Simple)' : 'Connected'}
+                {' \u00B7 '}You can review each step or change your settings.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Step 1: Create project */}
         {step === 1 && (
           <div className="space-y-4">
+            {isExternalBackend && (
+              <div className="rounded-lg border border-lower-border bg-lower-bg/40 px-3 py-2 flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-lower shrink-0" />
+                <span className="text-xs text-lower font-medium">Done — your project is created and connected.</span>
+              </div>
+            )}
             <p className="text-text-secondary text-sm">
               Create a free Supabase project. You’ll use it to store your workouts, exercises, and plants.
             </p>
@@ -197,6 +218,15 @@ export function Setup() {
         {/* Step 2: Copy credentials */}
         {step === 2 && (
           <div className="space-y-4">
+            {isExternalBackend && externalUrl && (
+              <div className="rounded-lg border border-lower-border bg-lower-bg/40 px-3 py-2 flex items-start gap-2">
+                <Check className="w-3.5 h-3.5 text-lower shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs text-lower font-medium">Saved</span>
+                  <p className="text-text-dim text-[11px] font-mono break-all mt-0.5">{externalUrl}</p>
+                </div>
+              </div>
+            )}
             <p className="text-text-secondary text-sm">
               In your project, open <strong className="text-text-primary">Settings → API</strong> and copy your
               project URL and the <strong className="text-text-primary">anon public</strong> key.
@@ -240,6 +270,14 @@ export function Setup() {
         {/* Step 3: Choose security mode */}
         {step === 3 && (
           <div className="space-y-4">
+            {isExternalBackend && (
+              <div className="rounded-lg border border-lower-border bg-lower-bg/40 px-3 py-2 flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-lower shrink-0" />
+                <span className="text-xs text-lower font-medium">
+                  Currently: {authMode === 'external-authed' ? 'Secure (auth-enabled)' : 'Simple (no auth)'}
+                </span>
+              </div>
+            )}
             <p className="text-text-secondary text-sm">
               Choose how strict you want access control to be on your project. You can start simple and switch to a secure, auth-gated setup later.
             </p>
@@ -325,6 +363,12 @@ export function Setup() {
         {/* Step 4: Run schema + verify */}
         {step === 4 && (
           <div className="space-y-4">
+            {isExternalBackend && (
+              <div className="rounded-lg border border-lower-border bg-lower-bg/40 px-3 py-2 flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-lower shrink-0" />
+                <span className="text-xs text-lower font-medium">Done — backend is verified and saved.</span>
+              </div>
+            )}
             <p className="text-text-secondary text-sm">
               Create the tables and policies the app needs, then confirm the app can reach your project. In your Supabase project, open the{' '}
               <strong className="text-text-primary">SQL Editor</strong>.
@@ -424,16 +468,40 @@ export function Setup() {
         {/* Step 5: Connect Claude */}
         {step === 5 && (
           <div className="space-y-4">
+            {isExternalBackend && (
+              <div className="rounded-lg border border-lower-border bg-lower-bg/40 px-3 py-2 flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-lower shrink-0" />
+                <span className="text-xs text-lower font-medium">Your backend is already saved.</span>
+              </div>
+            )}
             <p className="text-text-secondary text-sm">
               Use Claude with the Supabase MCP connector so you can log workouts, add plants, and manage data by conversation. Your app data lives in your Supabase project; Claude talks to it via MCP.
             </p>
             <ol className="list-decimal list-inside space-y-2 text-text-secondary text-sm">
               <li>In Claude (Code or app), add the Supabase MCP server.</li>
               <li>Configure it with your Supabase project URL and anon key (same as in Step 2).</li>
-              <li>Use the connector to run SQL, insert workouts, update plants, and follow the docs in the repo (<code className="text-text-muted bg-bg-elevated px-1 rounded">docs/workout-logging-instructions.md</code>, <code className="text-text-muted bg-bg-elevated px-1 rounded">docs/plant-care-instructions.md</code>).</li>
+              <li>
+                Use the connector to run SQL, insert workouts, update plants, and follow the in-app guides:
+                <div className="flex flex-col gap-1.5 mt-2 ml-1">
+                  <a
+                    href="#/instructions/workouts"
+                    className="flex items-center gap-1.5 text-upper-pull hover:underline text-xs"
+                  >
+                    Workout logging guide <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href="#/instructions/plants"
+                    className="flex items-center gap-1.5 text-upper-pull hover:underline text-xs"
+                  >
+                    Plant care guide <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </li>
             </ol>
             <p className="text-text-dim text-xs">
-              Your backend is already saved. You can change or disconnect it anytime in Settings.
+              {isExternalBackend
+                ? 'Your backend is already saved. You can change or disconnect it anytime in Settings.'
+                : 'Your backend is already saved. You can change or disconnect it anytime in Settings.'}
             </p>
           </div>
         )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { createClient } from '@supabase/supabase-js'
 import { useAuth } from '@/context/AuthContext'
 import { useSupabaseSettings, useDataClient } from '@/context/SupabaseContext'
@@ -9,8 +9,8 @@ import {
   type TokenStorageMode,
 } from '@/lib/token-storage'
 import { isAppOwner } from '@/lib/app-owner'
-import { getUnreadCount } from '@/lib/app-messages'
-import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock, Sparkles, Eye, EyeOff, Trash2, Bell, Monitor, Cloud, HardDrive, Shield, Copy } from 'lucide-react'
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase'
+import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock, Sparkles, Eye, EyeOff, Trash2, Monitor, Cloud, HardDrive, Shield, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
@@ -28,8 +28,9 @@ export function Settings() {
     clearExternalBackend,
   } = useSupabaseSettings()
 
-  const [url, setUrl] = useState(externalUrl ?? '')
-  const [anonKey, setAnonKey] = useState('')
+  const ownerOnShared = !isExternalBackend && !!user && isAppOwner(user.email)
+  const [url, setUrl] = useState(externalUrl ?? (ownerOnShared ? SUPABASE_URL : ''))
+  const [anonKey, setAnonKey] = useState(ownerOnShared ? SUPABASE_ANON_KEY : '')
   const [testStatus, setTestStatus] = useState<TestStatus>('idle')
   const [testMessage, setTestMessage] = useState('')
   const [saving, setSaving] = useState(false)
@@ -143,69 +144,71 @@ export function Settings() {
       </div>
 
       <div className="max-w-lg mx-auto px-5 py-6">
-        {/* Current status */}
-        <div className={cn(
-          'rounded-xl border p-4 mb-6',
-          isExternalBackend
-            ? 'bg-lower-bg border-lower-border'
-            : 'bg-bg-secondary border-border-default'
-        )}>
-          <div className="flex items-center gap-2.5 mb-1.5">
-            <Database className={cn('w-5 h-5', isExternalBackend ? 'text-lower' : 'text-text-muted')} />
-            <span className="text-sm font-semibold text-text-primary">
-              {isExternalBackend ? 'Connected to your Supabase' : 'Using shared backend'}
-            </span>
+        {/* Current status — hidden for app owner on shared backend (the "Your backend" card below covers it) */}
+        {!ownerOnShared && (
+          <div className={cn(
+            'rounded-xl border p-4 mb-6',
+            isExternalBackend
+              ? 'bg-lower-bg border-lower-border'
+              : 'bg-bg-secondary border-border-default'
+          )}>
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <Database className={cn('w-5 h-5', isExternalBackend ? 'text-lower' : 'text-text-muted')} />
+              <span className="text-sm font-semibold text-text-primary">
+                {isExternalBackend ? 'Connected to your Supabase' : 'Using shared backend'}
+              </span>
+            </div>
+            {isExternalBackend ? (
+              <p className="text-text-secondary text-xs ml-[30px]">
+                Data is stored on your own Supabase project.
+              </p>
+            ) : (
+              <p className="text-text-muted text-xs ml-[30px]">
+                Data is stored on the shared Supabase instance. Connect your own project below if you want a separate backend.
+              </p>
+            )}
+            {isExternalBackend && externalUrl && (
+              <div className="mt-2 ml-[30px]">
+                <span className="text-text-dim text-[11px] font-mono break-all">{externalUrl}</span>
+              </div>
+            )}
+            {isExternalBackend && (
+              <div className="mt-3 ml-[30px] flex flex-wrap items-center gap-2">
+                {authMode === 'external-authed' && (
+                  <span className={cn(
+                    'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+                    'bg-lower-bg text-lower border border-lower-border'
+                  )}>
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Authenticated (Secure)
+                  </span>
+                )}
+                {authMode === 'external-anon' && (
+                  <span className={cn(
+                    'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+                    'bg-bg-elevated text-text-muted border border-border-default'
+                  )}>
+                    Anon-only (Simple)
+                  </span>
+                )}
+                {authMode === 'external-error' && (
+                  <span className={cn(
+                    'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
+                    'bg-upper-push-bg/50 text-upper-push border border-upper-push-border'
+                  )}>
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    Auth failed
+                  </span>
+                )}
+                {externalAuthError && authMode !== 'external-authed' && (
+                  <span className="text-text-dim text-[11px] max-w-full" title={externalAuthError}>
+                    {externalAuthError.length > 50 ? `${externalAuthError.slice(0, 50)}…` : externalAuthError}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-          {isExternalBackend ? (
-            <p className="text-text-secondary text-xs ml-[30px]">
-              Data is stored on your own Supabase project.
-            </p>
-          ) : (
-            <p className="text-text-muted text-xs ml-[30px]">
-              Data is stored on the shared Supabase instance. Connect your own project below if you want a separate backend.
-            </p>
-          )}
-          {isExternalBackend && externalUrl && (
-            <div className="mt-2 ml-[30px]">
-              <span className="text-text-dim text-[11px] font-mono break-all">{externalUrl}</span>
-            </div>
-          )}
-          {isExternalBackend && (
-            <div className="mt-3 ml-[30px] flex flex-wrap items-center gap-2">
-              {authMode === 'external-authed' && (
-                <span className={cn(
-                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
-                  'bg-lower-bg text-lower border border-lower-border'
-                )}>
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  Authenticated (Secure)
-                </span>
-              )}
-              {authMode === 'external-anon' && (
-                <span className={cn(
-                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
-                  'bg-bg-elevated text-text-muted border border-border-default'
-                )}>
-                  Anon-only (Simple)
-                </span>
-              )}
-              {authMode === 'external-error' && (
-                <span className={cn(
-                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
-                  'bg-upper-push-bg/50 text-upper-push border border-upper-push-border'
-                )}>
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  Auth failed
-                </span>
-              )}
-              {externalAuthError && authMode !== 'external-authed' && (
-                <span className="text-text-dim text-[11px] max-w-full" title={externalAuthError}>
-                  {externalAuthError.length > 50 ? `${externalAuthError.slice(0, 50)}…` : externalAuthError}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Shared backend security info */}
         {!isExternalBackend && user && (
@@ -278,18 +281,26 @@ export function Settings() {
         {/* Connect form */}
         <div className="rounded-xl border border-border-default bg-bg-secondary p-4">
           <h2 className="text-sm font-semibold text-text-primary mb-1">
-            {isExternalBackend ? 'Update connection' : 'Connect your Supabase'}
+            {ownerOnShared ? 'Your Supabase project' : isExternalBackend ? 'Update connection' : 'Connect your Supabase'}
           </h2>
           <p className="text-text-muted text-xs mb-4">
-            Enter your Supabase project URL and anon (public) key. Find these in your project's{' '}
-            <a
-              href="https://supabase.com/dashboard/project/_/settings/api"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-upper-pull hover:underline inline-flex items-center gap-0.5"
-            >
-              API settings <ExternalLink className="w-3 h-3" />
-            </a>
+            {ownerOnShared ? (
+              <>
+                This is the shared Supabase project you own. Test the connection to verify everything is working.
+              </>
+            ) : (
+              <>
+                Enter your Supabase project URL and anon (public) key. Find these in your project's{' '}
+                <a
+                  href="https://supabase.com/dashboard/project/_/settings/api"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-upper-pull hover:underline inline-flex items-center gap-0.5"
+                >
+                  API settings <ExternalLink className="w-3 h-3" />
+                </a>
+              </>
+            )}
           </p>
 
           <div className="flex flex-col gap-3">
@@ -305,7 +316,11 @@ export function Settings() {
                   setTestStatus('idle')
                 }}
                 placeholder="https://xxxxx.supabase.co"
-                className="w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
+                readOnly={ownerOnShared}
+                className={cn(
+                  "w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-border-hover transition-colors",
+                  ownerOnShared && "text-text-secondary"
+                )}
               />
             </div>
 
@@ -321,7 +336,11 @@ export function Settings() {
                   setTestStatus('idle')
                 }}
                 placeholder="eyJhbGciOiJIUzI1NiIs..."
-                className="w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-border-hover transition-colors"
+                readOnly={ownerOnShared}
+                className={cn(
+                  "w-full py-2.5 px-3 bg-bg-primary border border-border-default rounded-lg text-text-primary text-base font-mono placeholder:text-text-dim outline-none focus:border-border-hover transition-colors",
+                  ownerOnShared && "text-text-secondary"
+                )}
               />
             </div>
 
@@ -354,37 +373,38 @@ export function Settings() {
                 Test Connection
               </button>
 
-              <button
-                onClick={handleSave}
-                disabled={!url.trim() || !anonKey.trim() || saving || testStatus !== 'success'}
-                className={cn(
-                  'flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer',
-                  'border-lower-border bg-lower-bg text-lower hover:bg-lower-tag',
-                  (!url.trim() || !anonKey.trim() || saving || testStatus !== 'success') && 'opacity-40 cursor-not-allowed'
-                )}
-              >
-                {saving ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Check className="w-4 h-4" />
-                )}
-                {isExternalBackend ? 'Update' : 'Connect'}
-              </button>
+              {!ownerOnShared && (
+                <button
+                  onClick={handleSave}
+                  disabled={!url.trim() || !anonKey.trim() || saving || testStatus !== 'success'}
+                  className={cn(
+                    'flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer',
+                    'border-lower-border bg-lower-bg text-lower hover:bg-lower-tag',
+                    (!url.trim() || !anonKey.trim() || saving || testStatus !== 'success') && 'opacity-40 cursor-not-allowed'
+                  )}
+                >
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  {isExternalBackend ? 'Update' : 'Connect'}
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {/* Info note */}
-        <p className="text-text-dim text-[11px] mt-4 text-center">
-          The anon key is a <span className="text-text-muted">publishable</span> key — safe to store.
-          Your project's service role key is never needed.
-        </p>
+        {!ownerOnShared && (
+          <p className="text-text-dim text-[11px] mt-4 text-center">
+            The anon key is a <span className="text-text-muted">publishable</span> key — safe to store.
+            Your project's service role key is never needed.
+          </p>
+        )}
 
         {/* AI Token */}
         <AITokenSection />
-
-        {/* Messages link */}
-        <MessagesLink />
       </div>
     </div>
   )
@@ -711,25 +731,3 @@ function AITokenSection() {
   )
 }
 
-function MessagesLink() {
-  const [unreadCount, setUnreadCount] = useState(0)
-
-  useEffect(() => {
-    setUnreadCount(getUnreadCount())
-  }, [])
-
-  return (
-    <Link
-      to="/messages"
-      className="flex items-center justify-center gap-2 mt-6 py-2.5 text-text-muted hover:text-text-primary transition-colors no-underline"
-    >
-      <Bell className="w-4 h-4" />
-      <span className="text-xs">Messages</span>
-      {unreadCount > 0 && (
-        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-upper-pull text-bg-primary text-[10px] font-bold">
-          {unreadCount}
-        </span>
-      )}
-    </Link>
-  )
-}

@@ -1566,6 +1566,13 @@ export function Plants() {
               </div>
             </div>
             <div className="flex items-center gap-1.5">
+              <Link
+                to="/instructions/plants"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors"
+                title="Care guide"
+              >
+                <Leaf className="w-4 h-4" />
+              </Link>
               <button
                 onClick={handleRefresh}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors cursor-pointer"

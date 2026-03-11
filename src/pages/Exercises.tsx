@@ -817,6 +817,13 @@ export function Exercises() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                to="/instructions/workouts"
+                className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
+                title="Logging guide"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+              </Link>
               <button
                 onClick={() => {
                   setSessionHistoryCache(new Map())

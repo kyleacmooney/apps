@@ -14,6 +14,7 @@ import { Setup } from './pages/Setup'
 import { Chat } from './pages/Chat'
 import { Todos } from './pages/Todos'
 import { Messages } from './pages/Messages'
+import { Instructions } from './pages/Instructions'
 
 export function App() {
   return (
@@ -85,6 +86,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <Messages />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/instructions/:guide"
+            element={
+              <ProtectedRoute>
+                <Instructions />
               </ProtectedRoute>
             }
           />

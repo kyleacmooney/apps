@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Home, ArrowLeft, Bell, Check, CheckCheck } from 'lucide-react'
-import { getBuiltInMessages, markMessageRead, markAllMessagesRead, type AppMessage } from '@/lib/app-messages'
+import { Home, ArrowLeft, Bell, Check, CheckCheck, MailOpen } from 'lucide-react'
+import { getBuiltInMessages, markMessageRead, markAllMessagesRead, resetMessageRead, type AppMessage } from '@/lib/app-messages'
 import { cn } from '@/lib/utils'
 
 export function Messages() {
@@ -16,6 +16,11 @@ export function Messages() {
 
   function handleMarkRead(id: string) {
     markMessageRead(id)
+    setMessages(getBuiltInMessages())
+  }
+
+  function handleMarkUnread(id: string) {
+    resetMessageRead(id)
     setMessages(getBuiltInMessages())
   }
 
@@ -87,7 +92,15 @@ export function Messages() {
                   )}>
                     {msg.title}
                   </h3>
-                  {!msg.read && (
+                  {msg.read ? (
+                    <button
+                      onClick={() => handleMarkUnread(msg.id)}
+                      className="shrink-0 text-text-dim hover:text-text-muted transition-colors"
+                      title="Mark as unread"
+                    >
+                      <MailOpen className="w-4 h-4" />
+                    </button>
+                  ) : (
                     <button
                       onClick={() => handleMarkRead(msg.id)}
                       className="shrink-0 text-text-muted hover:text-text-primary transition-colors"
