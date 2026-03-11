@@ -29,7 +29,8 @@ jobs:
           path: main-app
 
       - name: Checkout dev
-        if: github.ref_name == 'dev' || github.event_name == 'workflow_dispatch'
+        id: checkout-dev
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
           ref: dev
@@ -50,7 +51,7 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
       - name: Build dev
-        if: github.ref_name == 'dev' || github.event_name == 'workflow_dispatch'
+        if: steps.checkout-dev.outcome == 'success'
         run: |
           cd dev-app
           npm ci
