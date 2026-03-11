@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
@@ -22,22 +22,57 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-app
+
+      - name: Checkout dev
+        if: github.ref_name == 'dev' || github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: dev-app
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: 'main-app/package-lock.json'
 
-      - run: npm ci
-      - run: npm run build
+      - name: Build main
+        working-directory: ./main-app
+        run: |
+          npm ci
+          npm run build
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
+      - name: Build dev
+        if: github.ref_name == 'dev' || github.event_name == 'workflow_dispatch'
+        run: |
+          cd dev-app
+          npm ci
+          npx tsc -b
+          npx vite build --base=/apps/dev/
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+
+      - name: Combine Builds
+        run: |
+          mkdir -p combined-dist
+          cp -r main-app/dist/* combined-dist/
+          if [ -d "dev-app/dist" ]; then
+            mkdir -p combined-dist/dev
+            cp -r dev-app/dist/* combined-dist/dev/
+          fi
+
       - uses: actions/configure-pages@v5
+      
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: combined-dist
 
       - id: deployment
         uses: actions/deploy-pages@v4
