@@ -117,3 +117,12 @@ CREATE POLICY "species_profiles: owner" ON species_profiles
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
+-- User secrets
+DROP POLICY IF EXISTS "user_secrets: anon all" ON user_secrets;
+DROP POLICY IF EXISTS "user_secrets: authenticated all" ON user_secrets;
+
+CREATE POLICY "user_secrets: owner" ON user_secrets
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+

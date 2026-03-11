@@ -2,29 +2,18 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { Home, Send, Trash2, Square, Sparkles, User, AlertCircle, Settings, Menu, Plus, History, X } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
+import { useSupabaseSettings, useDataClient } from "@/context/SupabaseContext"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { SUPABASE_URL, supabase } from "@/lib/supabase"
+import { getToken, invalidateCache } from "@/lib/token-storage"
 
 const CHAT_EDGE_URL = `${SUPABASE_URL}/functions/v1/chat`
-const OAUTH_TOKEN_KEY = "claude-oauth-token"
 
 const SYSTEM_PROMPT = [
   "You are a helpful AI assistant embedded in a personal tools app.",
   "You help the user with their workouts, exercises, plant care, and other life management tasks.",
   "Be concise and friendly. Use markdown formatting when helpful.",
 ].join(" ")
-
-export function getClaudeOAuthToken(): string | null {
-  return localStorage.getItem(OAUTH_TOKEN_KEY)
-}
-
-export function setClaudeOAuthToken(token: string) {
-  localStorage.setItem(OAUTH_TOKEN_KEY, token)
-}
-
-export function clearClaudeOAuthToken() {
-  localStorage.removeItem(OAUTH_TOKEN_KEY)
-}
 
 interface ChatMessage {
   id: string
@@ -106,6 +95,8 @@ function parseSSEStream(
 
 export function Chat() {
   const { user, session } = useAuth()
+  const { isExternalBackend } = useSupabaseSettings()
+  const dataClient = useDataClient()
   const userId = user?.id ?? "guest"
 
   const [threads, setThreads] = useState<ChatThread[]>([])
@@ -117,12 +108,18 @@ export function Chat() {
   const [input, setInput] = usePersistedState(`chat-input:${userId}`, "")
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [hasToken, setHasToken] = useState(() => !!getClaudeOAuthToken())
+  const [hasToken, setHasToken] = useState(false)
+  const [tokenLoading, setTokenLoading] = useState(true)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  const tokenOpts = {
+    userId: user?.id,
+    externalClient: isExternalBackend ? dataClient : null,
+  }
 
   const upsertThread = useCallback((thread: ChatThread) => {
     setThreads((prev) => [thread, ...prev.filter((item) => item.id !== thread.id)])
@@ -150,8 +147,15 @@ export function Chat() {
   }, [threads, upsertThread])
 
   useEffect(() => {
-    setHasToken(!!getClaudeOAuthToken())
-  }, [])
+    let cancelled = false
+    setTokenLoading(true)
+    invalidateCache()
+    getToken(tokenOpts)
+      .then((t) => { if (!cancelled) setHasToken(!!t) })
+      .catch(() => { if (!cancelled) setHasToken(false) })
+      .finally(() => { if (!cancelled) setTokenLoading(false) })
+    return () => { cancelled = true }
+  }, [user?.id, isExternalBackend])
 
   useEffect(() => {
     if (!user) {
@@ -233,7 +237,12 @@ export function Chat() {
     const trimmed = input.trim()
     if (!trimmed || isStreaming) return
 
-    const token = getClaudeOAuthToken()
+    let token: string | null = null
+    try {
+      token = await getToken(tokenOpts)
+    } catch {
+      // fall through to the null check
+    }
     if (!token) {
       setError("No Claude OAuth token configured. Add one in Settings → AI Token.")
       return
@@ -419,6 +428,8 @@ export function Chat() {
     setInput,
     upsertThread,
     user,
+    isExternalBackend,
+    dataClient,
   ])
 
   const deleteThread = useCallback(async (e: React.MouseEvent, threadId: string) => {
@@ -553,7 +564,7 @@ export function Chat() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-          {messages.length === 0 && !hasToken && (
+          {messages.length === 0 && !hasToken && !tokenLoading && (
             <div className="flex-1 flex flex-col items-center justify-center text-center py-16">
               <div className="w-16 h-16 rounded-2xl bg-ai-bg border border-ai-border flex items-center justify-center mb-4">
                 <Sparkles className="w-8 h-8 text-ai" />
@@ -562,7 +573,7 @@ export function Chat() {
                 Set up AI Chat
               </h2>
               <p className="text-text-muted text-sm max-w-xs mb-4">
-                Add your Claude OAuth token in Settings to start chatting. Your token stays on your device - it&apos;s never sent to our servers.
+                Add your Claude OAuth token in Settings to start chatting.
               </p>
               <Link
                 to="/settings"
@@ -641,10 +652,10 @@ export function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={hasToken ? "Ask anything..." : "Set up token in Settings first"}
+            placeholder={tokenLoading ? "Loading…" : hasToken ? "Ask anything..." : "Set up token in Settings first"}
             rows={1}
             className="flex-1 resize-none rounded-xl border border-border-default bg-bg-primary px-4 py-2.5 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-ai-border transition-colors field-sizing-content max-h-32"
-            disabled={isStreaming || !hasToken}
+            disabled={isStreaming || !hasToken || tokenLoading}
           />
           {isStreaming ? (
             <button
@@ -657,7 +668,7 @@ export function Chat() {
           ) : (
             <button
               onClick={() => void sendMessage()}
-              disabled={!input.trim() || !hasToken}
+              disabled={!input.trim() || !hasToken || tokenLoading}
               className="shrink-0 w-10 h-10 rounded-xl bg-ai flex items-center justify-center text-white disabled:opacity-30 disabled:cursor-not-allowed hover:brightness-110 transition-all"
               title="Send message"
             >

@@ -185,6 +185,18 @@ CREATE TABLE species_profiles (
 );
 
 -- ============================================================
+-- Secrets (token storage for AI features)
+-- ============================================================
+
+CREATE TABLE user_secrets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  claude_oauth_token text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- ============================================================
 -- RLS: permissive (anon can read/write) — Phase 4 adds auth-gated policies
 -- ============================================================
 
@@ -197,6 +209,7 @@ ALTER TABLE plants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE care_schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE care_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE species_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_secrets ENABLE ROW LEVEL SECURITY;
 
 -- Allow anon and authenticated full access (permissive for single-user / optional auth)
 CREATE POLICY "exercises: anon all" ON exercises FOR ALL TO anon USING (true) WITH CHECK (true);
@@ -225,6 +238,9 @@ CREATE POLICY "care_logs: authenticated all" ON care_logs FOR ALL TO authenticat
 
 CREATE POLICY "species_profiles: anon all" ON species_profiles FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "species_profiles: authenticated all" ON species_profiles FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "user_secrets: anon all" ON user_secrets FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "user_secrets: authenticated all" ON user_secrets FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ============================================================
 -- Views (workout aggregates; RLS on base tables applies)

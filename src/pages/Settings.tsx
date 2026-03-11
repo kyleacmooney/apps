@@ -2,11 +2,15 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createClient } from '@supabase/supabase-js'
 import { useAuth } from '@/context/AuthContext'
-import { useSupabaseSettings } from '@/context/SupabaseContext'
-import { getClaudeOAuthToken, setClaudeOAuthToken, clearClaudeOAuthToken } from '@/pages/Chat'
+import { useSupabaseSettings, useDataClient } from '@/context/SupabaseContext'
+import {
+  getToken, saveToken, clearToken, migrateToken, invalidateCache,
+  getTokenStorageMode, setTokenStorageMode, PRIVATE_TABLE_SQL,
+  type TokenStorageMode,
+} from '@/lib/token-storage'
 import { isAppOwner } from '@/lib/app-owner'
 import { getUnreadCount } from '@/lib/app-messages'
-import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock, Sparkles, Eye, EyeOff, Trash2, Bell } from 'lucide-react'
+import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock, Sparkles, Eye, EyeOff, Trash2, Bell, Monitor, Cloud, HardDrive, Shield, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
@@ -386,35 +390,145 @@ export function Settings() {
   )
 }
 
+const SECURITY_META: Record<TokenStorageMode, {
+  icon: typeof Monitor
+  label: string
+  badge: string
+  badgeClass: string
+  description: string
+}> = {
+  local: {
+    icon: Monitor,
+    label: 'Browser',
+    badge: 'Basic',
+    badgeClass: 'bg-bg-elevated text-text-muted border border-border-default',
+    description: 'Stored in localStorage. Fast, but accessible to any script running on this page.',
+  },
+  shared: {
+    icon: Cloud,
+    label: 'Shared Supabase',
+    badge: 'Better',
+    badgeClass: 'bg-lower-bg text-lower border border-lower-border',
+    description: 'Encrypted at rest, protected by RLS — only your account can read it. Stored on shared infrastructure.',
+  },
+  private: {
+    icon: HardDrive,
+    label: 'Your Supabase',
+    badge: 'Best',
+    badgeClass: 'bg-ai-bg text-ai border border-ai-border',
+    description: 'Same server-side protections, on infrastructure you fully control.',
+  },
+}
+
 function AITokenSection() {
+  const { user } = useAuth()
+  const dataClient = useDataClient()
+  const { isExternalBackend, authMode } = useSupabaseSettings()
+
   const [tokenInput, setTokenInput] = useState('')
   const [showToken, setShowToken] = useState(false)
-  const [hasToken, setHasToken] = useState(() => !!getClaudeOAuthToken())
+  const [currentToken, setCurrentToken] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [storageMode, setStorageMode] = useState<TokenStorageMode>(getTokenStorageMode)
+  const [switching, setSwitching] = useState(false)
+  const [showSQL, setShowSQL] = useState(false)
+  const [copiedSQL, setCopiedSQL] = useState(false)
 
-  const maskedToken = hasToken
-    ? (() => {
-        const t = getClaudeOAuthToken()
-        if (!t) return '••••••••'
-        return t.length > 12 ? `${t.slice(0, 6)}••••${t.slice(-4)}` : '••••••••'
-      })()
-    : null
+  const tokenOpts = {
+    userId: user?.id,
+    externalClient: isExternalBackend ? dataClient : null,
+  }
 
-  function handleSave() {
+  const hasToken = !!currentToken
+
+  const maskedToken = currentToken && currentToken.length > 12
+    ? `${currentToken.slice(0, 6)}••••${currentToken.slice(-4)}`
+    : currentToken ? '••••••••' : null
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    getToken(tokenOpts)
+      .then((t) => { if (!cancelled) setCurrentToken(t) })
+      .catch(() => { if (!cancelled) setCurrentToken(null) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [user?.id, isExternalBackend, storageMode])
+
+  async function handleSave() {
     const trimmed = tokenInput.trim()
     if (!trimmed) return
-    setClaudeOAuthToken(trimmed)
-    setTokenInput('')
-    setHasToken(true)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setError(null)
+    try {
+      await saveToken(trimmed, tokenOpts)
+      setTokenInput('')
+      setCurrentToken(trimmed)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save token.'
+      if (msg === 'TABLE_MISSING') {
+        setError('Your Supabase project needs a user_secrets table. See SQL below.')
+        setShowSQL(true)
+      } else {
+        setError(msg)
+      }
+    }
   }
 
-  function handleClear() {
-    clearClaudeOAuthToken()
-    setHasToken(false)
-    setTokenInput('')
+  async function handleClear() {
+    setError(null)
+    try {
+      await clearToken(tokenOpts)
+      setCurrentToken(null)
+      setTokenInput('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove token.')
+    }
   }
+
+  async function handleModeChange(newMode: TokenStorageMode) {
+    if (newMode === storageMode) return
+    setSwitching(true)
+    setError(null)
+    setShowSQL(false)
+    const oldMode = storageMode
+
+    try {
+      await migrateToken(oldMode, newMode, tokenOpts)
+      setStorageMode(newMode)
+      invalidateCache()
+      const t = await getToken({ ...tokenOpts })
+      setCurrentToken(t)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to switch storage.'
+      if (msg === 'TABLE_MISSING') {
+        setTokenStorageMode(oldMode)
+        setError('Your Supabase project needs a user_secrets table. See SQL below.')
+        setShowSQL(true)
+      } else {
+        setTokenStorageMode(oldMode)
+        setError(msg)
+      }
+    } finally {
+      setSwitching(false)
+    }
+  }
+
+  function handleCopySQL() {
+    navigator.clipboard.writeText(PRIVATE_TABLE_SQL)
+    setCopiedSQL(true)
+    setTimeout(() => setCopiedSQL(false), 2000)
+  }
+
+  const availableModes: TokenStorageMode[] = ['local']
+  if (user) availableModes.push('shared')
+  if (isExternalBackend) availableModes.push('private')
+
+  const activeMeta = SECURITY_META[storageMode]
 
   return (
     <div className="rounded-xl border border-border-default bg-bg-secondary p-4 mt-6">
@@ -437,7 +551,12 @@ function AITokenSection() {
         ).
       </p>
 
-      {hasToken && (
+      {loading ? (
+        <div className="flex items-center gap-2 mb-3">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-text-muted" />
+          <span className="text-text-muted text-xs">Loading token…</span>
+        </div>
+      ) : hasToken ? (
         <div className="mb-3 flex items-center gap-2">
           <span className={cn(
             'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
@@ -454,11 +573,99 @@ function AITokenSection() {
             {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
         </div>
-      )}
+      ) : null}
 
       {hasToken && showToken && (
         <div className="mb-3">
           <span className="text-text-dim text-[11px] font-mono break-all">{maskedToken}</span>
+        </div>
+      )}
+
+      {/* Storage method selector */}
+      <div className="mb-3">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Shield className="w-3.5 h-3.5 text-text-muted" />
+          <span className="text-text-muted text-xs font-medium">Storage method</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {availableModes.map((mode) => {
+            const meta = SECURITY_META[mode]
+            const Icon = meta.icon
+            const isActive = mode === storageMode
+            const isPrivateAnon = mode === 'private' && authMode === 'external-anon'
+            return (
+              <button
+                key={mode}
+                onClick={() => handleModeChange(mode)}
+                disabled={switching}
+                className={cn(
+                  'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg border text-left transition-all cursor-pointer',
+                  isActive
+                    ? 'border-ai-border bg-ai-bg/40'
+                    : 'border-border-default bg-bg-primary hover:border-border-hover',
+                  switching && 'opacity-60 cursor-wait',
+                )}
+              >
+                <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-ai' : 'text-text-muted')} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'text-xs font-medium',
+                      isActive ? 'text-text-primary' : 'text-text-secondary',
+                    )}>
+                      {meta.label}
+                    </span>
+                    <span className={cn(
+                      'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium',
+                      meta.badgeClass,
+                    )}>
+                      {meta.badge}
+                    </span>
+                    {isPrivateAnon && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-bg-elevated text-text-dim border border-border-default">
+                        anon-only
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className={cn(
+                  'w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center',
+                  isActive ? 'border-ai' : 'border-border-default',
+                )}>
+                  {isActive && <div className="w-2 h-2 rounded-full bg-ai" />}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Error display */}
+      {error && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg px-3 py-2 text-xs bg-upper-push-bg text-upper-push border border-upper-push-border">
+          <X className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* SQL helper for private mode table creation */}
+      {showSQL && (
+        <div className="mb-3 rounded-lg border border-border-default bg-bg-primary p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-text-muted text-[11px] font-medium">
+              Create this table on your Supabase project:
+            </span>
+            <button
+              onClick={handleCopySQL}
+              className="flex items-center gap-1 text-[11px] text-text-muted hover:text-text-primary transition-colors"
+            >
+              {copiedSQL ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+              {copiedSQL ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-[10px] text-text-dim font-mono whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+            {PRIVATE_TABLE_SQL}
+          </pre>
         </div>
       )}
 
@@ -474,11 +681,11 @@ function AITokenSection() {
         <div className="flex gap-2">
           <button
             onClick={handleSave}
-            disabled={!tokenInput.trim()}
+            disabled={!tokenInput.trim() || loading}
             className={cn(
               'flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer',
               'border-ai-border bg-ai-bg text-ai hover:bg-ai-tag',
-              !tokenInput.trim() && 'opacity-40 cursor-not-allowed'
+              (!tokenInput.trim() || loading) && 'opacity-40 cursor-not-allowed'
             )}
           >
             {saved ? <Check className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
@@ -498,7 +705,7 @@ function AITokenSection() {
       </div>
 
       <p className="text-text-dim text-[11px] mt-3">
-        Stored in your browser's localStorage. When used, the token is sent through a secure edge function to the Anthropic API — it is never stored server-side.
+        {activeMeta.description} When used, the token is sent through a secure edge function to the Anthropic API — it is never stored server-side.
       </p>
     </div>
   )
