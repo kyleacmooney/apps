@@ -99,9 +99,11 @@ function isDueToday(dateStr: string): boolean {
 }
 
 function AddTodoForm({
+  storagePrefix,
   onAdd,
   onCancel,
 }: {
+  storagePrefix: string
   onAdd: (todo: {
     title: string
     description: string | null
@@ -113,13 +115,13 @@ function AddTodoForm({
   }) => void
   onCancel: () => void
 }) {
-  const [title, setTitle] = usePersistedState("todos:add:title", "")
-  const [description, setDescription] = usePersistedState("todos:add:desc", "")
-  const [dueDate, setDueDate] = usePersistedState("todos:add:due", "")
-  const [priority, setPriority] = usePersistedState<Priority>("todos:add:priority", "medium")
-  const [category, setCategory] = usePersistedState<Category>("todos:add:category", "personal")
-  const [isRecurring, setIsRecurring] = usePersistedState("todos:add:recurring", false)
-  const [recurringInterval, setRecurringInterval] = usePersistedState<"daily" | "weekly" | "monthly">("todos:add:interval", "daily")
+  const [title, setTitle] = usePersistedState(`${storagePrefix}:todos:add:title`, "")
+  const [description, setDescription] = usePersistedState(`${storagePrefix}:todos:add:desc`, "")
+  const [dueDate, setDueDate] = usePersistedState(`${storagePrefix}:todos:add:due`, "")
+  const [priority, setPriority] = usePersistedState<Priority>(`${storagePrefix}:todos:add:priority`, "medium")
+  const [category, setCategory] = usePersistedState<Category>(`${storagePrefix}:todos:add:category`, "personal")
+  const [isRecurring, setIsRecurring] = usePersistedState(`${storagePrefix}:todos:add:recurring`, false)
+  const [recurringInterval, setRecurringInterval] = usePersistedState<"daily" | "weekly" | "monthly">(`${storagePrefix}:todos:add:interval`, "daily")
   const titleRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -402,6 +404,7 @@ function EditTodoForm({
 }
 
 function TodoItem({
+  storagePrefix,
   todo,
   onToggle,
   onDelete,
@@ -410,6 +413,7 @@ function TodoItem({
   onSaveEdit,
   onCancelEdit,
 }: {
+  storagePrefix: string
   todo: Todo
   onToggle: () => void
   onDelete: () => void
@@ -418,7 +422,7 @@ function TodoItem({
   onSaveEdit: (updates: Partial<Todo>) => void
   onCancelEdit: () => void
 }) {
-  const [expanded, setExpanded] = usePersistedState(`todos:item:${todo.id}`, false)
+  const [expanded, setExpanded] = usePersistedState(`${storagePrefix}:todos:item:${todo.id}`, false)
   const isDone = todo.status === "done"
   const isRecurring = todo.status === "recurring"
   const colors = CATEGORY_COLORS[todo.category]
@@ -562,10 +566,11 @@ export function Todos() {
   const canGoForward = useCanGoForward()
   const queryClient = useQueryClient()
 
-  const [filterMode, setFilterMode] = usePersistedState<FilterMode>("todos:filter", "all")
-  const [categoryFilter, setCategoryFilter] = usePersistedState<Category | "all">("todos:catFilter", "all")
-  const [showAddForm, setShowAddForm] = usePersistedState("todos:showAdd", false)
-  const [editingId, setEditingId] = usePersistedState<string | null>("todos:editingId", null)
+  const storagePrefix = user?.id ?? "guest"
+  const [filterMode, setFilterMode] = usePersistedState<FilterMode>(`${storagePrefix}:todos:filter`, "all")
+  const [categoryFilter, setCategoryFilter] = usePersistedState<Category | "all">(`${storagePrefix}:todos:catFilter`, "all")
+  const [showAddForm, setShowAddForm] = usePersistedState(`${storagePrefix}:todos:showAdd`, false)
+  const [editingId, setEditingId] = usePersistedState<string | null>(`${storagePrefix}:todos:editingId`, null)
 
   const todosQuery = useQuery({
     queryKey: ["todos"],
@@ -654,7 +659,7 @@ export function Todos() {
       result = result.filter((t) => t.category === categoryFilter)
     }
 
-    return result.sort((a, b) => {
+    return [...result].sort((a, b) => {
       if (a.status === "done" && b.status !== "done") return 1
       if (a.status !== "done" && b.status === "done") return -1
 
@@ -832,6 +837,7 @@ export function Todos() {
         {showAddForm && (
           <div className="mb-4">
             <AddTodoForm
+              storagePrefix={storagePrefix}
               onAdd={(todo) => addMutation.mutate(todo)}
               onCancel={() => setShowAddForm(false)}
             />
@@ -880,6 +886,7 @@ export function Todos() {
           {filteredTodos.map((todo) => (
             <TodoItem
               key={todo.id}
+              storagePrefix={storagePrefix}
               todo={todo}
               onToggle={() => handleToggle(todo)}
               onDelete={() => deleteMutation.mutate(todo.id)}
