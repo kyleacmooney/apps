@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
-import { Home, Send, Trash2, Square, Sparkles, User, AlertCircle, Settings } from "lucide-react"
+import { Home, Send, Trash2, Square, Sparkles, User, AlertCircle, Settings, Menu, Plus, History, X } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
+import { useDataClient } from "@/context/SupabaseContext"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { SUPABASE_URL } from "@/lib/supabase"
 
@@ -31,6 +32,12 @@ interface ChatMessage {
   role: "user" | "assistant"
   content: string
   timestamp: number
+}
+
+interface ChatThread {
+  id: string
+  title: string
+  updated_at: string
 }
 
 function parseSSEStream(
@@ -87,16 +94,20 @@ function parseSSEStream(
 
 export function Chat() {
   const { user, session } = useAuth()
+  const supabase = useDataClient()
   const userId = user?.id ?? "guest"
 
-  const [messages, setMessages] = usePersistedState<ChatMessage[]>(
-    `chat-messages:${userId}`,
-    [],
+  const [threads, setThreads] = useState<ChatThread[]>([])
+  const [currentThreadId, setCurrentThreadId] = usePersistedState<string | null>(
+    `chat-current-thread:${userId}`,
+    null,
   )
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = usePersistedState(`chat-input:${userId}`, "")
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasToken, setHasToken] = useState(() => !!getClaudeOAuthToken())
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -105,6 +116,47 @@ export function Chat() {
   useEffect(() => {
     setHasToken(!!getClaudeOAuthToken())
   }, [])
+
+  // Load threads
+  useEffect(() => {
+    if (!user) return
+    const fetchThreads = async () => {
+      const { data, error } = await supabase
+        .from("chat_threads")
+        .select("*")
+        .order("updated_at", { ascending: false })
+      if (!error && data) {
+        setThreads(data)
+      }
+    }
+    fetchThreads()
+  }, [user, supabase])
+
+  // Load messages for current thread
+  useEffect(() => {
+    if (!currentThreadId) {
+      setMessages([])
+      return
+    }
+    const fetchMessages = async () => {
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .eq("thread_id", currentThreadId)
+        .order("created_at", { ascending: true })
+      if (!error && data) {
+        setMessages(
+          data.map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            timestamp: new Date(m.created_at).getTime(),
+          })),
+        )
+      }
+    }
+    fetchMessages()
+  }, [currentThreadId, supabase])
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -133,12 +185,45 @@ export function Chat() {
     }
 
     setError(null)
+
+    if (!user) {
+      setError("Sign in to save conversation history.")
+      return
+    }
+
+    let threadId = currentThreadId
+    if (!threadId) {
+      const { data, error: threadError } = await supabase
+        .from("chat_threads")
+        .insert({
+          user_id: user.id,
+          title: trimmed.slice(0, 40) + (trimmed.length > 40 ? "..." : ""),
+        })
+        .select()
+        .single()
+
+      if (threadError) {
+        setError("Failed to create conversation history.")
+        return
+      }
+      threadId = data.id
+      setCurrentThreadId(threadId)
+      setThreads((prev) => [data, ...prev])
+    }
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: trimmed,
       timestamp: Date.now(),
     }
+
+    // Save user message to Supabase
+    await supabase.from("chat_messages").insert({
+      thread_id: threadId,
+      role: "user",
+      content: trimmed,
+    })
 
     const assistantMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -196,21 +281,31 @@ export function Chat() {
 
       const reader = response.body.getReader()
 
+      let fullAssistantContent = ""
       parseSSEStream(
         reader,
         (token) => {
-          assistantMsg.content += token
+          fullAssistantContent += token
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMsg.id
-                ? { ...m, content: assistantMsg.content }
+                ? { ...m, content: fullAssistantContent }
                 : m,
             ),
           )
         },
-        () => {
+        async () => {
           setIsStreaming(false)
           abortRef.current = null
+
+          // Save assistant message to Supabase when done
+          if (fullAssistantContent) {
+            await supabase.from("chat_messages").insert({
+              thread_id: threadId!,
+              role: "assistant",
+              content: fullAssistantContent,
+            })
+          }
         },
         (errMsg) => {
           setError(errMsg)
@@ -238,10 +333,26 @@ export function Chat() {
   }, [])
 
   const clearChat = useCallback(() => {
+    setCurrentThreadId(null)
     setMessages([])
     setInput("")
     setError(null)
-  }, [setMessages, setInput])
+  }, [setInput, setCurrentThreadId])
+
+  const deleteThread = useCallback(async (e: React.MouseEvent, threadId: string) => {
+    e.stopPropagation()
+    const { error } = await supabase
+      .from("chat_threads")
+      .delete()
+      .eq("id", threadId)
+
+    if (!error) {
+      setThreads((prev) => prev.filter((t) => t.id !== threadId))
+      if (currentThreadId === threadId) {
+        clearChat()
+      }
+    }
+  }, [supabase, currentThreadId, clearChat])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -251,30 +362,119 @@ export function Chat() {
   }
 
   return (
-    <div className="h-[100dvh] bg-bg-primary flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border-default bg-bg-secondary/80 backdrop-blur-sm sticky top-0 z-10">
-        <Link
-          to="/"
-          className="text-text-muted hover:text-text-primary transition-colors"
-        >
-          <Home className="w-5 h-5" />
-        </Link>
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-ai" />
-          <h1 className="text-lg font-semibold text-text-primary">AI Chat</h1>
+    <div className="h-[100dvh] bg-bg-primary flex flex-col relative overflow-hidden">
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 w-72 bg-bg-secondary border-r border-border-default z-50 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          <div className="p-4 border-b border-border-default flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wider">History</h2>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-1 hover:bg-bg-elevated rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-text-muted" />
+            </button>
+          </div>
+
+          <div className="p-4">
+            <button
+              onClick={() => {
+                clearChat()
+                setIsSidebarOpen(false)
+              }}
+              className="w-full flex items-center gap-2 px-4 py-2 bg-ai text-white rounded-lg text-sm font-medium hover:brightness-110 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              New Chat
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
+            {threads.map((thread) => (
+              <div
+                key={thread.id}
+                onClick={() => {
+                  setCurrentThreadId(thread.id)
+                  setIsSidebarOpen(false)
+                }}
+                className={`group flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                  currentThreadId === thread.id
+                    ? 'bg-ai/10 text-ai'
+                    : 'text-text-secondary hover:bg-bg-elevated'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <History className="w-4 h-4 shrink-0 opacity-60" />
+                  <span className="text-sm truncate">{thread.title}</span>
+                </div>
+                <button
+                  onClick={(e) => deleteThread(e, thread.id)}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            {threads.length === 0 && (
+              <div className="px-4 py-8 text-center">
+                <p className="text-xs text-text-muted">No conversations yet</p>
+              </div>
+            )}
+          </div>
         </div>
-        <button
-          onClick={clearChat}
-          className="text-text-muted hover:text-text-primary transition-colors"
-          title="Clear conversation"
-        >
-          <Trash2 className="w-5 h-5" />
-        </button>
+      </div>
+
+      {/* Header */}
+      <div className="border-b border-border-default bg-bg-secondary/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="text-text-muted hover:text-text-primary transition-colors p-1 -ml-1"
+              title="History"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <Link
+              to="/"
+              className="text-text-muted hover:text-text-primary transition-colors"
+            >
+              <Home className="w-5 h-5" />
+            </Link>
+          </div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-ai" />
+            <h1 className="text-lg font-semibold text-text-primary truncate max-w-[150px] sm:max-w-[300px]">
+              {currentThreadId
+                ? threads.find(t => t.id === currentThreadId)?.title || "AI Chat"
+                : "AI Chat"}
+            </h1>
+          </div>
+          <button
+            onClick={() => {
+              if (confirm("Clear current conversation?")) {
+                clearChat()
+              }
+            }}
+            className="text-text-muted hover:text-text-primary transition-colors"
+            title="New chat"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
         {messages.length === 0 && !hasToken && (
           <div className="flex-1 flex flex-col items-center justify-center text-center py-16">
             <div className="w-16 h-16 rounded-2xl bg-ai-bg border border-ai-border flex items-center justify-center mb-4">
@@ -353,11 +553,12 @@ export function Chat() {
         )}
 
         <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Input */}
-      <div className="border-t border-border-default bg-bg-secondary/80 backdrop-blur-sm px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-end gap-2 max-w-2xl mx-auto">
+      <div className="border-t border-border-default bg-bg-secondary/80 backdrop-blur-sm">
+        <div className="max-w-2xl mx-auto px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-end gap-2">
           <textarea
             ref={textareaRef}
             value={input}
