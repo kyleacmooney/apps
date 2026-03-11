@@ -46,7 +46,6 @@ supabase/
   config.toml                      # Supabase CLI project config (local dev settings)
   migrations/                      # All DDL migrations (applied via MCP or CLI)
   functions/                       # Edge function source code (one dir per function)
-    proxy-image-upload/index.ts    # Downloads external images → Supabase Storage
     chat/index.ts                  # AI chat — proxies streaming Claude API calls via OAuth token
 ```
 
@@ -75,9 +74,9 @@ supabase/
 - Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles`, `user_settings`, `todos` — all RLS-enabled
 - **`user_settings`:** Stores per-user external Supabase config (`external_supabase_url`, `external_supabase_anon_key`) and optional `claude_oauth_token` (when "Shared Supabase" storage is chosen). Always on the shared Supabase, never on a user's external project. One row per user via unique constraint on `user_id`.
 - **`user_secrets`:** Optional table on the user's external Supabase project for storing `claude_oauth_token` when "Your Supabase" storage is chosen. It is created only in the auth-enabled schema path from `docs/schema-auth.sql`, not in the permissive anon schema.
-- Edge Functions: `proxy-image-upload` (downloads external image URLs and self-hosts them in Supabase Storage, updating `species_profiles.image_url`), `chat` (proxies streaming Claude API calls; validates the caller's shared Supabase session and forwards to Anthropic). **Deploy chat with** `supabase functions deploy chat --no-verify-jwt` — auth is verified inside the function; gateway JWT verification can reject valid session tokens.
+- Edge Functions: `chat` (proxies streaming Claude API calls; validates the caller's shared Supabase session and forwards to Anthropic). **Deploy chat with** `supabase functions deploy chat --no-verify-jwt` — auth is verified inside the function; gateway JWT verification can reject valid session tokens.
 - **AI Chat:** The in-app AI chat (`pages/Chat.tsx`) calls the `chat` edge function with the user's Supabase session. In `shared` storage mode, the edge function looks up the Claude OAuth token server-side from `user_settings`; in `local`/`private` mode, the browser still sends the token in the request body. Tokens may be stored on Supabase depending on the selected mode.
-- Storage: `plant-photos` bucket (public read) — stores species reference images under `species/` and user-uploaded plant photos
+- Storage: `plant-photos` bucket (public read) — stores user-uploaded plant photos
 - `species_profiles` is the primary source of species data, populated by Claude.ai via `docs/plant-care-instructions.md`
 - **Workout logging instructions** (used in Claude.ai conversations): [`docs/workout-logging-instructions.md`](docs/workout-logging-instructions.md)
 - **Plant care instructions** (used in Claude.ai conversations): [`docs/plant-care-instructions.md`](docs/plant-care-instructions.md)

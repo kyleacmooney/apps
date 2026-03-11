@@ -45,7 +45,7 @@ This is the **primary source of species information**. Claude.ai creates a profi
 
 - `id` (uuid PK), `user_id` (uuid FK)
 - `species_common_name` (text), `species_scientific_name` (text, nullable)
-- `image_url` (text, nullable — reference image URL; initially set to a Wikipedia/Wikimedia Commons URL, then self-hosted via the `proxy-image-upload` edge function)
+- `image_url` (text, nullable — reference image URL from Wikipedia/Wikimedia Commons)
 - **Algorithm-relevant fields** (affect watering/care schedule computation):
   - `watering_interval_days` (integer — researched base watering interval in days)
   - `humidity_preference` (text: 'low'/'average'/'high')
