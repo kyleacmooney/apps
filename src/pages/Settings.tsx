@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { useAuth } from '@/context/AuthContext'
 import { useSupabaseSettings, useDataClient } from '@/context/SupabaseContext'
 import {
-  getToken, saveToken, clearToken, migrateToken, invalidateCache,
+  getToken, hasStoredToken, saveToken, clearToken, migrateToken, invalidateCache,
   getTokenStorageMode, setTokenStorageMode, PRIVATE_TABLE_SQL,
   type TokenStorageMode,
 } from '@/lib/token-storage'
@@ -420,23 +420,23 @@ const SECURITY_META: Record<TokenStorageMode, {
   local: {
     icon: Monitor,
     label: 'Browser',
-    badge: 'Basic',
+    badge: 'Browser-held',
     badgeClass: 'bg-bg-elevated text-text-muted border border-border-default',
-    description: 'Stored in localStorage. Fast, but accessible to any script running on this page.',
+    description: 'Stored in localStorage on this device. Fast, but accessible to any script running on this page.',
   },
   shared: {
     icon: Cloud,
     label: 'Shared Supabase',
-    badge: 'Better',
+    badge: 'Recommended',
     badgeClass: 'bg-lower-bg text-lower border border-lower-border',
-    description: 'Encrypted at rest, protected by RLS — only your account can read it. Stored on shared infrastructure.',
+    description: 'Stored server-side on the shared Supabase project and used by the chat edge function without sending the token from the browser on each request.',
   },
   private: {
     icon: HardDrive,
     label: 'Your Supabase',
-    badge: 'Best',
+    badge: 'Advanced',
     badgeClass: 'bg-ai-bg text-ai border border-ai-border',
-    description: 'Same server-side protections, on infrastructure you fully control.',
+    description: 'Stored on your own Supabase project. Only use this when Google auth is enabled there; anon-only projects are not safe for secrets.',
   },
 }
 
@@ -448,6 +448,7 @@ function AITokenSection() {
   const [tokenInput, setTokenInput] = useState('')
   const [showToken, setShowToken] = useState(false)
   const [currentToken, setCurrentToken] = useState<string | null>(null)
+  const [storedRemotely, setStoredRemotely] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -462,8 +463,9 @@ function AITokenSection() {
   }
 
   const hasToken = !!currentToken
+  const isLocalMode = storageMode === 'local'
 
-  const maskedToken = currentToken && currentToken.length > 12
+  const maskedToken = isLocalMode && currentToken && currentToken.length > 12
     ? `${currentToken.slice(0, 6)}••••${currentToken.slice(-4)}`
     : currentToken ? '••••••••' : null
 
@@ -471,12 +473,39 @@ function AITokenSection() {
     let cancelled = false
     setLoading(true)
     setError(null)
-    getToken(tokenOpts)
-      .then((t) => { if (!cancelled) setCurrentToken(t) })
-      .catch(() => { if (!cancelled) setCurrentToken(null) })
+    hasStoredToken(tokenOpts)
+      .then(async (present) => {
+        if (cancelled) return
+        setStoredRemotely(storageMode !== 'local' && present)
+        if (!present) {
+          setCurrentToken(null)
+          return
+        }
+        if (storageMode === 'local') {
+          const token = await getToken(tokenOpts)
+          if (!cancelled) setCurrentToken(token)
+          return
+        }
+        setCurrentToken('__stored__')
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCurrentToken(null)
+          setStoredRemotely(false)
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [user?.id, isExternalBackend, storageMode])
+
+  useEffect(() => {
+    if (storageMode === 'private' && authMode !== 'external-authed') {
+      setTokenStorageMode(user ? 'shared' : 'local')
+      setStorageMode(user ? 'shared' : 'local')
+      setShowToken(false)
+      setError('Private token storage was disabled because your external Supabase project is not authenticated with Google OAuth.')
+    }
+  }, [authMode, storageMode, user])
 
   async function handleSave() {
     const trimmed = tokenInput.trim()
@@ -485,7 +514,8 @@ function AITokenSection() {
     try {
       await saveToken(trimmed, tokenOpts)
       setTokenInput('')
-      setCurrentToken(trimmed)
+      setCurrentToken(storageMode === 'local' ? trimmed : '__stored__')
+      setStoredRemotely(storageMode !== 'local')
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
@@ -504,6 +534,7 @@ function AITokenSection() {
     try {
       await clearToken(tokenOpts)
       setCurrentToken(null)
+      setStoredRemotely(false)
       setTokenInput('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove token.')
@@ -521,8 +552,16 @@ function AITokenSection() {
       await migrateToken(oldMode, newMode, tokenOpts)
       setStorageMode(newMode)
       invalidateCache()
-      const t = await getToken({ ...tokenOpts })
-      setCurrentToken(t)
+      const present = await hasStoredToken({ ...tokenOpts })
+      setStoredRemotely(newMode !== 'local' && present)
+      if (!present) {
+        setCurrentToken(null)
+      } else if (newMode === 'local') {
+        const t = await getToken({ ...tokenOpts })
+        setCurrentToken(t)
+      } else {
+        setCurrentToken('__stored__')
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to switch storage.'
       if (msg === 'TABLE_MISSING') {
@@ -546,7 +585,7 @@ function AITokenSection() {
 
   const availableModes: TokenStorageMode[] = ['local']
   if (user) availableModes.push('shared')
-  if (isExternalBackend) availableModes.push('private')
+  if (isExternalBackend && authMode === 'external-authed') availableModes.push('private')
 
   const activeMeta = SECURITY_META[storageMode]
 
@@ -585,19 +624,29 @@ function AITokenSection() {
             <Check className="w-3.5 h-3.5" />
             Token configured
           </span>
-          <button
-            onClick={() => setShowToken((s) => !s)}
-            className="text-text-dim hover:text-text-muted transition-colors"
-            title={showToken ? 'Hide token' : 'Show token'}
-          >
-            {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          </button>
+          {isLocalMode && (
+            <button
+              onClick={() => setShowToken((s) => !s)}
+              className="text-text-dim hover:text-text-muted transition-colors"
+              title={showToken ? 'Hide token' : 'Show token'}
+            >
+              {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          )}
         </div>
       ) : null}
 
-      {hasToken && showToken && (
+      {hasToken && isLocalMode && showToken && (
         <div className="mb-3">
           <span className="text-text-dim text-[11px] font-mono break-all">{maskedToken}</span>
+        </div>
+      )}
+
+      {hasToken && storedRemotely && (
+        <div className="mb-3">
+          <span className="text-text-dim text-[11px]">
+            Token is stored server-side and is not displayed back into this UI.
+          </span>
         </div>
       )}
 
@@ -612,7 +661,6 @@ function AITokenSection() {
             const meta = SECURITY_META[mode]
             const Icon = meta.icon
             const isActive = mode === storageMode
-            const isPrivateAnon = mode === 'private' && authMode === 'external-anon'
             return (
               <button
                 key={mode}
@@ -641,11 +689,6 @@ function AITokenSection() {
                     )}>
                       {meta.badge}
                     </span>
-                    {isPrivateAnon && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-bg-elevated text-text-dim border border-border-default">
-                        anon-only
-                      </span>
-                    )}
                   </div>
                 </div>
                 <div className={cn(
@@ -724,10 +767,15 @@ function AITokenSection() {
         </div>
       </div>
 
+      {isExternalBackend && authMode !== 'external-authed' && (
+        <p className="text-text-dim text-[11px] mt-3">
+          Your external Supabase project is running in anon-only mode. Private token storage is disabled until Google auth is enabled there.
+        </p>
+      )}
+
       <p className="text-text-dim text-[11px] mt-3">
-        {activeMeta.description} When used, the token is sent through a secure edge function to the Anthropic API — it is never stored server-side.
+        {activeMeta.description}
       </p>
     </div>
   )
 }
-

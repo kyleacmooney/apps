@@ -50,6 +50,17 @@ async function readShared(userId: string): Promise<string | null> {
   return data?.claude_oauth_token ?? null
 }
 
+async function hasShared(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('user_settings')
+    .select('user_id')
+    .eq('user_id', userId)
+    .not('claude_oauth_token', 'is', null)
+    .maybeSingle()
+  if (error) throw error
+  return !!data
+}
+
 async function writeShared(userId: string, token: string): Promise<void> {
   const { error } = await supabase
     .from('user_settings')
@@ -81,6 +92,22 @@ async function readPrivate(client: SupabaseClient, userId: string): Promise<stri
     throw error
   }
   return data?.claude_oauth_token ?? null
+}
+
+async function hasPrivate(client: SupabaseClient, userId: string): Promise<boolean> {
+  const { data, error } = await client
+    .from('user_secrets')
+    .select('user_id')
+    .eq('user_id', userId)
+    .not('claude_oauth_token', 'is', null)
+    .maybeSingle()
+  if (error) {
+    if (error.message.includes('user_secrets') && error.message.includes('does not exist')) {
+      throw new Error('TABLE_MISSING')
+    }
+    throw error
+  }
+  return !!data
 }
 
 async function writePrivate(client: SupabaseClient, userId: string, token: string): Promise<void> {
@@ -118,6 +145,21 @@ async function clearPrivate(client: SupabaseClient, userId: string): Promise<voi
 interface TokenOpts {
   userId?: string
   externalClient?: SupabaseClient | null
+}
+
+export async function hasStoredToken(opts: TokenOpts): Promise<boolean> {
+  const mode = getTokenStorageMode()
+
+  switch (mode) {
+    case 'local':
+      return !!readLocal()
+    case 'shared':
+      if (!opts.userId) return false
+      return await hasShared(opts.userId)
+    case 'private':
+      if (!opts.externalClient || !opts.userId) return false
+      return await hasPrivate(opts.externalClient, opts.userId)
+  }
 }
 
 export async function getToken(opts: TokenOpts): Promise<string | null> {
@@ -259,6 +301,7 @@ export async function migrateToken(
 }
 
 export const PRIVATE_TABLE_SQL = `-- Run this in your Supabase project's SQL Editor
+-- Requires Google auth to be enabled on that project.
 CREATE TABLE IF NOT EXISTS user_secrets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL UNIQUE,
@@ -269,11 +312,7 @@ CREATE TABLE IF NOT EXISTS user_secrets (
 
 ALTER TABLE user_secrets ENABLE ROW LEVEL SECURITY;
 
--- Permissive policies (simple mode)
-CREATE POLICY "user_secrets: anon all"
-  ON user_secrets FOR ALL TO anon
-  USING (true) WITH CHECK (true);
-
-CREATE POLICY "user_secrets: authenticated all"
+CREATE POLICY "user_secrets: owner"
   ON user_secrets FOR ALL TO authenticated
-  USING (true) WITH CHECK (true);`
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());`

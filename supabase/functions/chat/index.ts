@@ -18,11 +18,19 @@ interface ChatRequest {
   messages: ChatMessage[];
   system?: string;
   context?: string;
-  /** User's Claude OAuth token; when provided, used instead of CLAUDE_CODE_OAUTH_TOKEN (avoids CORS) */
+  /** User's Claude OAuth token for browser-held modes (`local` / `private`) */
   oauth_token?: string;
+  /** Storage mode used by the client; shared mode resolves the token server-side */
+  token_storage_mode?: "local" | "shared" | "private";
   model?: string;
   max_tokens?: number;
 }
+
+const ALLOWED_MODELS = new Set([
+  "claude-sonnet-4-20250514",
+]);
+
+const MAX_ALLOWED_TOKENS = 4096;
 
 async function verifyAuth(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("Authorization");
@@ -40,6 +48,27 @@ async function verifyAuth(req: Request): Promise<string | null> {
   return user?.id ?? null;
 }
 
+async function getSharedOAuthToken(userId: string): Promise<string | null> {
+  const serviceRoleKey = Deno.env.get("CHAT_SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) {
+    throw new Error("CHAT_SUPABASE_SERVICE_ROLE_KEY not configured");
+  }
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    serviceRoleKey,
+  );
+
+  const { data, error } = await admin
+    .from("user_settings")
+    .select("claude_oauth_token")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.claude_oauth_token ?? null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -55,18 +84,43 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = (await req.json()) as ChatRequest;
-    const { messages, system, context, oauth_token: userOAuthToken, model, max_tokens } = body;
+    const {
+      messages,
+      system,
+      context,
+      oauth_token: userOAuthToken,
+      token_storage_mode,
+      model,
+      max_tokens,
+    } = body;
 
-    const oauthToken = userOAuthToken ?? Deno.env.get("CLAUDE_CODE_OAUTH_TOKEN");
+    const resolvedModel = model ?? "claude-sonnet-4-20250514";
+    if (!ALLOWED_MODELS.has(resolvedModel)) {
+      return new Response(
+        JSON.stringify({ error: "Unsupported model" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const resolvedMaxTokens = Math.min(max_tokens ?? 2048, MAX_ALLOWED_TOKENS);
+
+    let oauthToken: string | null = null;
+    if (token_storage_mode === "shared") {
+      oauthToken = await getSharedOAuthToken(userId);
+    } else {
+      oauthToken = userOAuthToken ?? null;
+    }
+
     if (!oauthToken) {
       return new Response(
         JSON.stringify({
-          error: userOAuthToken
-            ? "Invalid or expired OAuth token. Update it in Settings → AI Chat."
-            : "CLAUDE_CODE_OAUTH_TOKEN not configured",
+          error: "Invalid or missing OAuth token. Update it in Settings → AI Token.",
         }),
         {
-          status: userOAuthToken ? 401 : 500,
+          status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
@@ -101,8 +155,8 @@ Deno.serve(async (req: Request) => {
         "anthropic-beta": "oauth-2025-04-20",
       },
       body: JSON.stringify({
-        model: model ?? "claude-sonnet-4-20250514",
-        max_tokens: max_tokens ?? 2048,
+        model: resolvedModel,
+        max_tokens: resolvedMaxTokens,
         system: systemPrompt,
         messages: messages.map((m) => ({
           role: m.role,

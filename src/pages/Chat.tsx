@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings, useDataClient } from "@/context/SupabaseContext"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { SUPABASE_URL, supabase } from "@/lib/supabase"
-import { getToken, invalidateCache } from "@/lib/token-storage"
+import { getToken, getTokenStorageMode, hasStoredToken, invalidateCache } from "@/lib/token-storage"
 
 const CHAT_EDGE_URL = `${SUPABASE_URL}/functions/v1/chat`
 
@@ -95,7 +95,7 @@ function parseSSEStream(
 
 export function Chat() {
   const { user, session } = useAuth()
-  const { isExternalBackend } = useSupabaseSettings()
+  const { isExternalBackend, authMode } = useSupabaseSettings()
   const dataClient = useDataClient()
   const userId = user?.id ?? "guest"
 
@@ -138,12 +138,18 @@ export function Chat() {
     let cancelled = false
     setTokenLoading(true)
     invalidateCache()
-    getToken(tokenOpts)
-      .then((t) => { if (!cancelled) setHasToken(!!t) })
+    if (getTokenStorageMode() === "private" && authMode !== "external-authed") {
+      setHasToken(false)
+      setTokenLoading(false)
+      setError("Private token storage requires Google-authenticated access on your external Supabase project. Switch storage modes in Settings.")
+      return
+    }
+    hasStoredToken(tokenOpts)
+      .then((present) => { if (!cancelled) setHasToken(present) })
       .catch(() => { if (!cancelled) setHasToken(false) })
       .finally(() => { if (!cancelled) setTokenLoading(false) })
     return () => { cancelled = true }
-  }, [user?.id, isExternalBackend])
+  }, [user?.id, isExternalBackend, authMode])
 
   useEffect(() => {
     if (!user) {
@@ -225,15 +231,34 @@ export function Chat() {
     const trimmed = input.trim()
     if (!trimmed || isStreaming) return
 
-    let token: string | null = null
-    try {
-      token = await getToken(tokenOpts)
-    } catch {
-      // fall through to the null check
-    }
-    if (!token) {
-      setError("No Claude OAuth token configured. Add one in Settings → AI Token.")
+    const storageMode = getTokenStorageMode()
+    if (storageMode === "private" && authMode !== "external-authed") {
+      setError("Private token storage requires Google-authenticated access on your external Supabase project. Switch storage modes in Settings.")
       return
+    }
+    let token: string | null = null
+
+    if (storageMode !== "shared") {
+      try {
+        token = await getToken(tokenOpts)
+      } catch {
+        // fall through to the null check
+      }
+      if (!token) {
+        setError("No Claude OAuth token configured. Add one in Settings → AI Token.")
+        return
+      }
+    } else {
+      try {
+        const present = await hasStoredToken(tokenOpts)
+        if (!present) {
+          setError("No Claude OAuth token configured. Add one in Settings → AI Token.")
+          return
+        }
+      } catch {
+        setError("No Claude OAuth token configured. Add one in Settings → AI Token.")
+        return
+      }
     }
     if (!session?.access_token) {
       setError("Sign in to use AI Chat.")
@@ -327,6 +352,7 @@ export function Chat() {
           messages: apiMessages,
           system: SYSTEM_PROMPT,
           oauth_token: token,
+          token_storage_mode: storageMode,
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
         }),
