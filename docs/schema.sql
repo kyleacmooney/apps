@@ -313,6 +313,120 @@ SELECT ws.id AS session_id,
   ORDER BY ws.date DESC, we."position";
 
 -- ============================================================
+-- Todos
+-- ============================================================
+
+CREATE TABLE todos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  description text,
+  due_date date,
+  priority text NOT NULL DEFAULT 'medium',
+  status text NOT NULL DEFAULT 'pending',
+  category text NOT NULL DEFAULT 'personal',
+  recurring_interval text,
+  completed_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_todos_user ON todos (user_id);
+
+ALTER TABLE todos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "todos: anon all" ON todos FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "todos: authenticated all" ON todos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- ============================================================
+-- Chat
+-- ============================================================
+
+CREATE TABLE chat_threads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL DEFAULT 'New Conversation',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE chat_messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  thread_id uuid NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
+  role text NOT NULL CHECK (role IN ('user', 'assistant')),
+  content text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_chat_threads_user ON chat_threads (user_id);
+CREATE INDEX idx_chat_messages_thread ON chat_messages (thread_id);
+
+ALTER TABLE chat_threads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "chat_threads: anon all" ON chat_threads FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "chat_threads: authenticated all" ON chat_threads FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "chat_messages: anon all" ON chat_messages FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "chat_messages: authenticated all" ON chat_messages FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- ============================================================
+-- Row limit triggers — prevent abuse by capping rows per scope
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION enforce_row_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  max_rows  integer := TG_ARGV[0]::integer;
+  scope_col text    := TG_ARGV[1];
+  scope_val text;
+  cur_count integer;
+BEGIN
+  EXECUTE format('SELECT ($1).%I::text', scope_col) INTO scope_val USING NEW;
+
+  EXECUTE format(
+    'SELECT count(*)::integer FROM %I.%I WHERE %I = $1',
+    TG_TABLE_SCHEMA, TG_TABLE_NAME, scope_col
+  ) INTO cur_count USING scope_val;
+
+  IF cur_count >= max_rows THEN
+    RAISE EXCEPTION 'Row limit exceeded: % allows at most % rows per %',
+      TG_TABLE_NAME, max_rows, scope_col
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER enforce_exercises_limit
+  BEFORE INSERT ON exercises FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('500', 'user_id');
+CREATE TRIGGER enforce_workout_sessions_limit
+  BEFORE INSERT ON workout_sessions FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('2000', 'user_id');
+CREATE TRIGGER enforce_workout_exercises_limit
+  BEFORE INSERT ON workout_exercises FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('30', 'session_id');
+CREATE TRIGGER enforce_workout_sets_limit
+  BEFORE INSERT ON workout_sets FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('20', 'workout_exercise_id');
+CREATE TRIGGER enforce_rooms_limit
+  BEFORE INSERT ON rooms FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('50', 'user_id');
+CREATE TRIGGER enforce_plants_limit
+  BEFORE INSERT ON plants FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('200', 'user_id');
+CREATE TRIGGER enforce_care_schedules_limit
+  BEFORE INSERT ON care_schedules FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('1200', 'user_id');
+CREATE TRIGGER enforce_care_logs_limit
+  BEFORE INSERT ON care_logs FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('50000', 'user_id');
+CREATE TRIGGER enforce_species_profiles_limit
+  BEFORE INSERT ON species_profiles FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('500', 'user_id');
+CREATE TRIGGER enforce_todos_limit
+  BEFORE INSERT ON todos FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('5000', 'user_id');
+CREATE TRIGGER enforce_chat_threads_limit
+  BEFORE INSERT ON chat_threads FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('200', 'user_id');
+CREATE TRIGGER enforce_chat_messages_limit
+  BEFORE INSERT ON chat_messages FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('100', 'thread_id');
+
+-- ============================================================
 -- Storage: plant-photos bucket (public read, anon write for app uploads)
 -- ============================================================
 

@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/mobile/PageHeader"
+import { friendlyError } from "@/lib/error-utils"
 import {
   ArrowRight,
   RefreshCw,
@@ -830,7 +831,7 @@ export function Todos() {
             />
             {addMutation.error && (
               <p className="text-upper-push text-xs mt-2">
-                {addMutation.error instanceof Error ? addMutation.error.message : "Failed to add todo"}
+                {friendlyError(addMutation.error)}
               </p>
             )}
           </div>

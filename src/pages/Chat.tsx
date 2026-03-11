@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings, useDataClient } from "@/context/SupabaseContext"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { SUPABASE_URL, supabase } from "@/lib/supabase"
+import { friendlyError } from "@/lib/error-utils"
 import { getToken, getTokenStorageMode, hasStoredToken, invalidateCache } from "@/lib/token-storage"
 
 const CHAT_EDGE_URL = `${SUPABASE_URL}/functions/v1/chat`
@@ -283,7 +284,7 @@ export function Chat() {
         .single()
 
       if (threadError || !data) {
-        setError("Failed to create conversation history.")
+        setError(friendlyError(threadError ?? new Error("Failed to create conversation.")))
         return
       }
 
@@ -315,7 +316,7 @@ export function Chat() {
       })
 
     if (userMessageError) {
-      setError("Failed to save your message.")
+      setError(friendlyError(userMessageError))
       return
     }
 
@@ -371,6 +372,8 @@ export function Chat() {
 
         if (response.status === 401) {
           errorMsg = "Invalid or expired OAuth token. Update it in Settings → AI Token."
+        } else if (response.status === 429) {
+          errorMsg = errorMsg.includes("Rate limit") ? errorMsg : "Too many conversations today. Try again later."
         }
         throw new Error(errorMsg)
       }

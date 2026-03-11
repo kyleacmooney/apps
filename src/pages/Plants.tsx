@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useDataClient } from '@/context/SupabaseContext'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
+import { friendlyError } from '@/lib/error-utils'
 import { computeDefaultSchedules } from '@/lib/plant-care-algorithm'
 import {
   CARE_TYPE_CONFIG,
@@ -625,7 +626,7 @@ function AddPlantDialog({
 
           {createPlant.isError && (
             <p className="text-red-400 text-xs text-center">
-              Failed to add plant. Please try again.
+              {friendlyError(createPlant.error)}
             </p>
           )}
         </div>
@@ -687,7 +688,7 @@ function RoomDialog({
       onOpenChange(false)
     },
     onError: (err) => {
-      setError(err.message)
+      setError(friendlyError(err))
     },
   })
 

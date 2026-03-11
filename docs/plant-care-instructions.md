@@ -112,20 +112,7 @@ ON CONFLICT (user_id, species_common_name) DO UPDATE SET
   updated_at = now();
 ```
 
-3. Self-host the image by triggering the `proxy-image-upload` edge function (downloads the image and uploads to Supabase Storage, then updates `image_url` with the storage URL):
-```sql
-SELECT net.http_post(
-  url := 'https://svmjtlsdyghxilpcdywc.supabase.co/functions/v1/proxy-image-upload',
-  body := jsonb_build_object(
-    'source_url', 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Monstera_deliciosa_example.jpg/800px-Monstera_deliciosa_example.jpg',
-    'species_common_name', 'Swiss cheese plant',
-    'user_id', auth.uid()::text
-  ),
-  headers := jsonb_build_object('Content-Type', 'application/json')
-);
-```
-
-This runs asynchronously — the Wikipedia URL works immediately as a fallback, and the edge function replaces it with a self-hosted Supabase Storage URL in the background.
+The `image_url` will point to a Wikipedia/Wikimedia Commons URL. The app displays these directly — no additional self-hosting step is needed.
 
 ### Update a specific plant's notes
 
@@ -192,7 +179,7 @@ END $$;
 - Always use year 2026 for dates
 - **Every plant needs a species profile.** When the user mentions a new plant, proactively create a `species_profiles` entry with researched data and an image URL
 - When researching species, populate ALL fields (`care_summary`, `common_problems`, `propagation_tips`, `seasonal_care_notes`, `fun_facts`, `image_url`) — the plant detail view displays them
-- For `image_url`, find a clear reference photo from Wikipedia/Wikimedia Commons (CC-licensed). After inserting the profile, call `net.http_post()` to trigger self-hosting via the `proxy-image-upload` edge function
+- For `image_url`, find a clear reference photo from Wikipedia/Wikimedia Commons (CC-licensed)
 - For `watering_interval_days`, research the actual recommended frequency for indoor conditions and convert to days (e.g., "water every 7-10 days" → 8)
 - `dormancy_months` uses 1-indexed months: January=1, December=12
 - When updating `care_schedules`, always set `is_custom = true` to indicate the interval was manually/research-adjusted

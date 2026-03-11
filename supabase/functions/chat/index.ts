@@ -31,6 +31,7 @@ const ALLOWED_MODELS = new Set([
 ]);
 
 const MAX_ALLOWED_TOKENS = 4096;
+const MAX_THREADS_PER_DAY = 50;
 
 async function verifyAuth(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("Authorization");
@@ -80,6 +81,35 @@ Deno.serve(async (req: Request) => {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  // ── Rate limit: max threads created in the last 24 hours ──
+  try {
+    const serviceRoleKey = Deno.env.get("CHAT_SUPABASE_SERVICE_ROLE_KEY");
+    if (serviceRoleKey) {
+      const admin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        serviceRoleKey,
+      );
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count } = await admin
+        .from("chat_threads")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .gte("created_at", since);
+
+      if (count !== null && count >= MAX_THREADS_PER_DAY) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. You've created too many conversations today. Try again later." }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+  } catch {
+    // Rate limit check is best-effort; don't block chat on failure
   }
 
   try {
