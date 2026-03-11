@@ -125,26 +125,14 @@ export function Chat() {
     setThreads((prev) => [thread, ...prev.filter((item) => item.id !== thread.id)])
   }, [])
 
-  const bumpThread = useCallback(async (threadId: string) => {
-    const updatedAt = new Date().toISOString()
-    const existingThread = threads.find((thread) => thread.id === threadId)
-
-    const { data } = await supabase
-      .from("chat_threads")
-      .update({ updated_at: updatedAt })
-      .eq("id", threadId)
-      .select("id, title, updated_at")
-      .single()
-
-    if (data) {
-      upsertThread(data)
-      return
-    }
-
-    if (existingThread) {
-      upsertThread({ ...existingThread, updated_at: updatedAt })
-    }
-  }, [threads, upsertThread])
+  const bumpThread = useCallback((threadId: string) => {
+    setThreads((prev) => {
+      const thread = prev.find((t) => t.id === threadId)
+      if (!thread) return prev
+      const updated = { ...thread, updated_at: new Date().toISOString() }
+      return [updated, ...prev.filter((t) => t.id !== threadId)]
+    })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -306,7 +294,7 @@ export function Chat() {
       return
     }
 
-    void bumpThread(activeThreadId)
+    bumpThread(activeThreadId)
 
     const assistantMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -397,7 +385,7 @@ export function Chat() {
             return
           }
 
-          void bumpThread(activeThreadId)
+          bumpThread(activeThreadId)
         },
         (errMsg) => {
           setError(errMsg)
