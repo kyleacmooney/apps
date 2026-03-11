@@ -1,44 +1,26 @@
 import { useEffect, useState } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings } from "@/context/SupabaseContext"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
-import { usePersistedState } from "@/lib/use-persisted-state"
+import { getUnreadCount } from "@/lib/app-messages"
 import { cn } from "@/lib/utils"
-import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings, Database, X, Check, Sparkles, ListTodo } from "lucide-react"
-
-const WELCOME_SESSION_KEY = 'home-welcome-seen-session'
+import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings, Database, Check, Sparkles, ListTodo, Bell, ChevronRight } from "lucide-react"
 
 export function Home() {
   const { user, signIn, signOut } = useAuth()
-  const { isExternalBackend, settingsLoading } = useSupabaseSettings()
-  const welcomeKey = user ? `home-welcome-dismissed:${user.id}` : 'home-welcome-dismissed:guest'
-  const [welcomeDismissed, setWelcomeDismissed] = usePersistedState(welcomeKey, false)
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { isExternalBackend, settingsLoading, authMode } = useSupabaseSettings()
   const navigate = useNavigate()
   const canGoForward = useCanGoForward()
-  const showSetupCard = user && !settingsLoading && !isExternalBackend
+  const [unreadCount, setUnreadCount] = useState(0)
 
-  // Show banner at most once per session (so refresh doesn't show it again)
-  const [showBannerThisSession] = useState(
-    () => typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(WELCOME_SESSION_KEY)
-  )
   useEffect(() => {
-    if (user && !welcomeDismissed && showBannerThisSession) {
-      sessionStorage.setItem(WELCOME_SESSION_KEY, '1')
-    }
-  }, [user, welcomeDismissed, showBannerThisSession])
+    setUnreadCount(getUnreadCount())
+  }, [])
 
-  // "Show intro again" from Settings or link: clear dismissal and force banner to show
-  const [forceShowBanner, setForceShowBanner] = useState(false)
-  useEffect(() => {
-    if (searchParams.get('showIntro') === '1') {
-      setWelcomeDismissed(false)
-      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(WELCOME_SESSION_KEY)
-      setForceShowBanner(true)
-      setSearchParams({}, { replace: true })
-    }
-  }, [searchParams, setSearchParams, setWelcomeDismissed])
+  const backendStatusLabel = isExternalBackend
+    ? authMode === 'external-authed' ? 'Connected (Secure)' : authMode === 'external-anon' ? 'Connected (Anon)' : authMode === 'external-error' ? 'Auth error' : 'Connected'
+    : 'Using shared backend'
 
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col">
@@ -97,124 +79,141 @@ export function Home() {
         </h1>
         <p className="text-text-muted text-sm mb-6">Personal tools</p>
 
-        {/* Welcome banner: once per session, or when user asks to see intro again */}
-        {user && !welcomeDismissed && (showBannerThisSession || forceShowBanner) && (
-          <div className="w-full max-w-md mb-6 rounded-xl border border-upper-pull-border bg-upper-pull-bg/30 px-4 py-3 relative">
-            <button
-              type="button"
-              onClick={() => setWelcomeDismissed(true)}
-              className="absolute top-2 right-2 text-text-muted hover:text-text-primary transition-colors"
-              aria-label="Dismiss"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <p className="text-text-primary text-sm pr-6">
-              Use Claude with the Supabase MCP connector to log workouts, add plants, and manage data by conversation. Set up your own backend for full data ownership, or use the shared one to try the app.
-            </p>
-          </div>
-        )}
-
-        {user && !settingsLoading && !isExternalBackend && (
-          <p className="text-text-muted text-sm mb-4 w-full max-w-md text-center">
-            You're connected — using the shared backend. No setup needed.
-          </p>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md">
-          {showSetupCard && (
-            <Link
-              to="/setup"
-              className="group block p-6 rounded-xl bg-lower-bg/50 border-2 border-dashed border-lower-border hover:border-lower hover:bg-lower-bg/70 transition-all duration-200 no-underline"
-            >
-              <Database className="w-8 h-8 text-lower mb-3 group-hover:scale-110 transition-transform" />
-              <h2 className="text-lg font-semibold text-text-primary mb-1">
-                Set up your own backend
-              </h2>
-              <p className="text-text-muted text-sm">
-                Optional — use your own Supabase project & connect Claude via MCP
-              </p>
-            </Link>
-          )}
+        {/* App grid — 2 columns */}
+        <div className="grid grid-cols-2 gap-3 w-full max-w-md">
           <Link
             to="/exercises"
-            className="group block p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-upper-pull-border transition-all duration-200 no-underline"
+            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-upper-pull-border transition-all duration-200 no-underline aspect-square"
           >
-            <BookOpen className="w-8 h-8 text-upper-pull mb-3 group-hover:scale-110 transition-transform" />
-            <h2 className="text-lg font-semibold text-text-primary mb-1">
+            <BookOpen className="w-9 h-9 text-upper-pull mb-2.5 group-hover:scale-110 transition-transform" />
+            <h2 className="text-sm font-semibold text-text-primary text-center">
               Exercises
             </h2>
-            <p className="text-text-muted text-sm">
-              Form cues, progressions & notes
+            <p className="text-text-muted text-[11px] text-center mt-0.5">
+              Form & progressions
             </p>
           </Link>
 
           <Link
             to="/workouts"
-            className="group block p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-cardio-border transition-all duration-200 no-underline"
+            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-cardio-border transition-all duration-200 no-underline aspect-square"
           >
-            <Dumbbell className="w-8 h-8 text-cardio mb-3 group-hover:scale-110 transition-transform" />
-            <h2 className="text-lg font-semibold text-text-primary mb-1">
+            <Dumbbell className="w-9 h-9 text-cardio mb-2.5 group-hover:scale-110 transition-transform" />
+            <h2 className="text-sm font-semibold text-text-primary text-center">
               Workouts
             </h2>
-            <p className="text-text-muted text-sm">
-              Session history & logging
+            <p className="text-text-muted text-[11px] text-center mt-0.5">
+              Session history
             </p>
           </Link>
 
           <Link
             to="/plants"
-            className="group block p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-plant-border transition-all duration-200 no-underline"
+            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-plant-border transition-all duration-200 no-underline aspect-square"
           >
-            <Sprout className="w-8 h-8 text-plant mb-3 group-hover:scale-110 transition-transform" />
-            <h2 className="text-lg font-semibold text-text-primary mb-1">
+            <Sprout className="w-9 h-9 text-plant mb-2.5 group-hover:scale-110 transition-transform" />
+            <h2 className="text-sm font-semibold text-text-primary text-center">
               Plants
             </h2>
-            <p className="text-text-muted text-sm">
-              Care schedules & tracking
+            <p className="text-text-muted text-[11px] text-center mt-0.5">
+              Care & tracking
             </p>
           </Link>
 
           <Link
             to="/todos"
-            className="group block p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-ai-border transition-all duration-200 no-underline"
+            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-ai-border transition-all duration-200 no-underline aspect-square"
           >
-            <ListTodo className="w-8 h-8 text-ai mb-3 group-hover:scale-110 transition-transform" />
-            <h2 className="text-lg font-semibold text-text-primary mb-1">
+            <ListTodo className="w-9 h-9 text-ai mb-2.5 group-hover:scale-110 transition-transform" />
+            <h2 className="text-sm font-semibold text-text-primary text-center">
               Todos
             </h2>
-            <p className="text-text-muted text-sm">
-              Daily tasks & to-dos
+            <p className="text-text-muted text-[11px] text-center mt-0.5">
+              Daily tasks
             </p>
           </Link>
 
           <Link
             to="/chat"
-            className="group block p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-ai-border transition-all duration-200 no-underline"
+            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-ai-border transition-all duration-200 no-underline aspect-square"
           >
-            <Sparkles className="w-8 h-8 text-ai mb-3 group-hover:scale-110 transition-transform" />
-            <h2 className="text-lg font-semibold text-text-primary mb-1">
+            <Sparkles className="w-9 h-9 text-ai mb-2.5 group-hover:scale-110 transition-transform" />
+            <h2 className="text-sm font-semibold text-text-primary text-center">
               AI Chat
             </h2>
-            <p className="text-text-muted text-sm">
-              Ask questions & get help
+            <p className="text-text-muted text-[11px] text-center mt-0.5">
+              Ask anything
             </p>
           </Link>
 
-          {user && (
+          <Link
+            to="/messages"
+            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-upper-pull-border transition-all duration-200 no-underline aspect-square relative"
+          >
+            <Bell className="w-9 h-9 text-upper-pull mb-2.5 group-hover:scale-110 transition-transform" />
+            <h2 className="text-sm font-semibold text-text-primary text-center">
+              Messages
+            </h2>
+            <p className="text-text-muted text-[11px] text-center mt-0.5">
+              Notifications
+            </p>
+            {unreadCount > 0 && (
+              <span className="absolute top-3 right-3 inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded-full bg-upper-pull text-bg-primary text-[11px] font-bold">
+                {unreadCount}
+              </span>
+            )}
+          </Link>
+        </div>
+
+        {/* Utility row — visually distinct from app grid */}
+        {user && (
+          <div className="w-full max-w-md mt-4 flex flex-col gap-2">
+            {!settingsLoading && !isExternalBackend && (
+              <Link
+                to="/setup"
+                className="group flex items-center gap-3 px-4 py-3 rounded-xl bg-bg-primary border border-dashed border-border-default hover:border-lower-border hover:bg-lower-bg/30 transition-all duration-200 no-underline"
+              >
+                <Database className="w-5 h-5 text-lower shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-text-secondary group-hover:text-text-primary transition-colors">
+                    Set up your own backend
+                  </span>
+                  <span className="block text-[11px] text-text-dim mt-0.5">
+                    {backendStatusLabel}
+                  </span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-text-dim shrink-0" />
+              </Link>
+            )}
+            {isExternalBackend && (
+              <Link
+                to="/setup"
+                className="group flex items-center gap-3 px-4 py-3 rounded-xl bg-bg-primary border border-lower-border/50 hover:border-lower-border hover:bg-lower-bg/30 transition-all duration-200 no-underline"
+              >
+                <Database className="w-5 h-5 text-lower shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-text-secondary group-hover:text-text-primary transition-colors">
+                    Your backend
+                  </span>
+                  <span className="block text-[11px] text-lower mt-0.5">
+                    {backendStatusLabel}
+                  </span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-text-dim shrink-0" />
+              </Link>
+            )}
             <Link
               to="/settings"
-              className="group block p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-border-hover transition-all duration-200 no-underline"
+              className="group flex items-center gap-3 px-4 py-3 rounded-xl bg-bg-primary border border-border-default hover:border-border-hover transition-all duration-200 no-underline"
             >
-              <Settings className="w-8 h-8 text-text-muted mb-3 group-hover:scale-110 transition-transform" />
-              <h2 className="text-lg font-semibold text-text-primary mb-1">
+              <Settings className="w-5 h-5 text-text-muted shrink-0" />
+              <span className="text-sm font-medium text-text-secondary group-hover:text-text-primary transition-colors flex-1">
                 Settings
-              </h2>
-              <p className="text-text-muted text-sm">
-                Backend & configuration
-              </p>
+              </span>
+              <ChevronRight className="w-4 h-4 text-text-dim shrink-0" />
             </Link>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

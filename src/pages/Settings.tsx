@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createClient } from '@supabase/supabase-js'
 import { useAuth } from '@/context/AuthContext'
 import { useSupabaseSettings } from '@/context/SupabaseContext'
 import { getClaudeOAuthToken, setClaudeOAuthToken, clearClaudeOAuthToken } from '@/pages/Chat'
-import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock, Sparkles, Eye, EyeOff, Trash2 } from 'lucide-react'
+import { isAppOwner } from '@/lib/app-owner'
+import { getUnreadCount } from '@/lib/app-messages'
+import { ArrowLeft, Database, ExternalLink, Loader2, Check, X, Unplug, Home, ShieldCheck, ShieldAlert, Lock, Sparkles, Eye, EyeOff, Trash2, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
@@ -207,11 +209,15 @@ export function Settings() {
             <div className="flex items-center gap-2.5 mb-2">
               <Lock className="w-5 h-5 text-lower" />
               <span className="text-sm font-semibold text-text-primary">
-                Your data is secure
+                {isAppOwner(user.email) ? 'Your backend' : 'Your data is secure'}
               </span>
             </div>
             <p className="text-text-secondary text-xs ml-[30px] mb-2.5">
-              Signed in as <span className="font-medium text-text-primary">{user.email}</span>. Row-level security enforces that only you can read or write your own data — no other user on the shared backend can access it.
+              {isAppOwner(user.email) ? (
+                <>Signed in as <span className="font-medium text-text-primary">{user.email}</span>. You own this Supabase project — full infrastructure control, including RLS policies, edge functions, and storage.</>
+              ) : (
+                <>Signed in as <span className="font-medium text-text-primary">{user.email}</span>. Row-level security enforces that only you can read or write your own data — no other user on the shared backend can access it.</>
+              )}
             </p>
             <div className="ml-[30px] flex flex-wrap gap-2">
               <span className={cn(
@@ -229,9 +235,11 @@ export function Settings() {
                 Google OAuth
               </span>
             </div>
-            <p className="text-text-dim text-[11px] ml-[30px] mt-2.5">
-              Setting up a separate project is optional — useful if you want full infrastructure ownership, but not required for security.
-            </p>
+            {!isAppOwner(user.email) && (
+              <p className="text-text-dim text-[11px] ml-[30px] mt-2.5">
+                Setting up a separate project is optional — useful if you want full infrastructure ownership, but not required for security.
+              </p>
+            )}
           </div>
         )}
 
@@ -368,25 +376,17 @@ export function Settings() {
           Your project's service role key is never needed.
         </p>
 
-        {/* AI Chat Token */}
-        <AIChatTokenSection />
+        {/* AI Token */}
+        <AITokenSection />
 
-        {/* Show intro again */}
-        <p className="text-text-dim text-[11px] mt-6 text-center">
-          <Link
-            to="/?showIntro=1"
-            className="text-text-muted hover:text-text-primary transition-colors underline"
-          >
-            Show intro again
-          </Link>
-          {' — what this app does and how to use Claude with Supabase.'}
-        </p>
+        {/* Messages link */}
+        <MessagesLink />
       </div>
     </div>
   )
 }
 
-function AIChatTokenSection() {
+function AITokenSection() {
   const [tokenInput, setTokenInput] = useState('')
   const [showToken, setShowToken] = useState(false)
   const [hasToken, setHasToken] = useState(() => !!getClaudeOAuthToken())
@@ -420,11 +420,11 @@ function AIChatTokenSection() {
     <div className="rounded-xl border border-border-default bg-bg-secondary p-4 mt-6">
       <div className="flex items-center gap-2.5 mb-1.5">
         <Sparkles className="w-5 h-5 text-ai" />
-        <span className="text-sm font-semibold text-text-primary">AI Chat</span>
+        <span className="text-sm font-semibold text-text-primary">AI Token</span>
       </div>
-      <p className="text-text-muted text-xs ml-[30px] mb-3">
-        Add your Claude OAuth token to enable in-app AI chat. Get one by running{' '}
-        <code className="px-1 py-0.5 rounded bg-bg-primary text-ai text-[11px] font-mono">claude config get oauthToken</code>{' '}
+      <p className="text-text-muted text-xs mb-3">
+        Add your Claude OAuth token to enable AI features. Get one by running{' '}
+        <code className="px-1 py-0.5 rounded bg-bg-primary text-ai text-[11px] font-mono">claude setup-token</code>{' '}
         in your terminal (requires{' '}
         <a
           href="https://docs.anthropic.com/en/docs/claude-code/overview"
@@ -438,7 +438,7 @@ function AIChatTokenSection() {
       </p>
 
       {hasToken && (
-        <div className="ml-[30px] mb-3 flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           <span className={cn(
             'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium',
             'bg-ai-bg text-ai border border-ai-border'
@@ -457,12 +457,12 @@ function AIChatTokenSection() {
       )}
 
       {hasToken && showToken && (
-        <div className="ml-[30px] mb-3">
+        <div className="mb-3">
           <span className="text-text-dim text-[11px] font-mono break-all">{maskedToken}</span>
         </div>
       )}
 
-      <div className="ml-[30px] flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <input
           type="password"
           value={tokenInput}
@@ -497,9 +497,32 @@ function AIChatTokenSection() {
         </div>
       </div>
 
-      <p className="text-text-dim text-[11px] ml-[30px] mt-3">
-        Stored only in your browser's localStorage — never sent to our servers. Calls go directly from your browser to the Anthropic API.
+      <p className="text-text-dim text-[11px] mt-3">
+        Stored in your browser's localStorage. When used, the token is sent through a secure edge function to the Anthropic API — it is never stored server-side.
       </p>
     </div>
+  )
+}
+
+function MessagesLink() {
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    setUnreadCount(getUnreadCount())
+  }, [])
+
+  return (
+    <Link
+      to="/messages"
+      className="flex items-center justify-center gap-2 mt-6 py-2.5 text-text-muted hover:text-text-primary transition-colors no-underline"
+    >
+      <Bell className="w-4 h-4" />
+      <span className="text-xs">Messages</span>
+      {unreadCount > 0 && (
+        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-upper-pull text-bg-primary text-[10px] font-bold">
+          {unreadCount}
+        </span>
+      )}
+    </Link>
   )
 }

@@ -13,6 +13,7 @@ import { Settings } from './pages/Settings'
 import { Setup } from './pages/Setup'
 import { Chat } from './pages/Chat'
 import { Todos } from './pages/Todos'
+import { Messages } from './pages/Messages'
 
 export function App() {
   return (
@@ -76,6 +77,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <Chat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/messages"
+            element={
+              <ProtectedRoute>
+                <Messages />
               </ProtectedRoute>
             }
           />

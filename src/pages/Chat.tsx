@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
-import { Home, Send, Trash2, Square, Sparkles, User, AlertCircle, Settings } from "lucide-react"
+import { Home, Send, Trash2, Square, Sparkles, AlertCircle, Settings } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { SUPABASE_URL } from "@/lib/supabase"
@@ -124,7 +124,7 @@ export function Chat() {
 
     const token = getClaudeOAuthToken()
     if (!token) {
-      setError("No Claude OAuth token configured. Add one in Settings → AI Chat.")
+      setError("No Claude OAuth token configured. Add one in Settings → AI Token.")
       return
     }
     if (!session?.access_token) {
@@ -187,7 +187,7 @@ export function Chat() {
         } catch { /* use default */ }
 
         if (response.status === 401) {
-          errorMsg = "Invalid or expired OAuth token. Update it in Settings → AI Chat."
+          errorMsg = "Invalid or expired OAuth token. Update it in Settings → AI Token."
         }
         throw new Error(errorMsg)
       }
@@ -284,7 +284,7 @@ export function Chat() {
               Set up AI Chat
             </h2>
             <p className="text-text-muted text-sm max-w-xs mb-4">
-              Add your Claude OAuth token in Settings to start chatting. Your token stays on your device — it's never sent to our servers.
+              Add your Claude OAuth token in Settings to start chatting.
             </p>
             <Link
               to="/settings"
@@ -313,15 +313,10 @@ export function Chat() {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
-            {msg.role === "assistant" && (
-              <div className="w-7 h-7 rounded-lg bg-ai-bg border border-ai-border flex items-center justify-center shrink-0 mt-0.5">
-                <Sparkles className="w-3.5 h-3.5 text-ai" />
-              </div>
-            )}
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[88%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-ai text-white rounded-br-md"
                   : "bg-bg-secondary border border-border-default text-text-primary rounded-bl-md"
@@ -337,11 +332,6 @@ export function Chat() {
                 <MessageContent content={msg.content} />
               )}
             </div>
-            {msg.role === "user" && (
-              <div className="w-7 h-7 rounded-lg bg-bg-elevated border border-border-default flex items-center justify-center shrink-0 mt-0.5">
-                <User className="w-3.5 h-3.5 text-text-muted" />
-              </div>
-            )}
           </div>
         ))}
 
