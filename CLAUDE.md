@@ -110,5 +110,6 @@ When using `preview_*` tools to verify changes:
 
 ## Deployment
 
-- Push to `main` → GitHub Actions builds and deploys to GitHub Pages. Workflow: `.github/workflows/deploy.yml`.
-- **Auto-merge:** Pushes to `claude/*` branches are automatically fast-forward merged to `main` and the branch is deleted. Workflow: `.github/workflows/auto-merge-claude.yml`. This means every push you make gets deployed — treat each push as a production deploy.
+- **Deploy workflow:** `.github/workflows/deploy.yml` — builds `main` → `/apps/` (production) and `dev` → `/apps/dev/` (staging). Triggered by push to `main` or `dev`, or manually via `workflow_dispatch`.
+- **Auto-merge:** Pushes to `claude/*` branches are automatically fast-forward merged to `dev` (staging) and the branch is deleted. Workflow: `.github/workflows/auto-merge-claude.yml`. Changes land at `/apps/dev/` first — not production.
+- **Promote to production:** Run `gh workflow run promote-to-prod.yml` (or use the GitHub Actions UI) to merge `dev` into `main` and deploy. Workflow: `.github/workflows/promote-to-prod.yml`.
