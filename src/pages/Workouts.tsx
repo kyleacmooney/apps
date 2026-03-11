@@ -1081,6 +1081,13 @@ export function Workouts() {
         sticky={viewMode === "list"}
         rightActions={
           <>
+            <Link
+              to="/instructions/workouts"
+              className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors no-underline"
+              title="Guide"
+            >
+              <FileText className="w-4 h-4" />
+            </Link>
             <button
               onClick={() => {
                 queryClient.invalidateQueries({ queryKey: ['workouts'] })
@@ -1128,18 +1135,9 @@ export function Workouts() {
           </>
         }
       />
-      <div className="max-w-2xl mx-auto px-5 pt-3">
-        <Link
-          to="/instructions/workouts"
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xs font-semibold hover:border-border-hover transition-colors no-underline"
-        >
-          <FileText className="w-4 h-4 text-text-dim" />
-          Guide
-        </Link>
-      </div>
       {/* Session type filter pills — list view only */}
       {viewMode === "list" && (
-        <div className="max-w-2xl mx-auto px-5 pb-4 border-b border-border-default">
+        <div className="max-w-2xl mx-auto px-5 pt-3 pb-4 border-b border-border-default">
           <div className="select-none">
             <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
               {allTypes.map((type) => {
