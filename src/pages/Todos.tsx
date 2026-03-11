@@ -441,7 +441,7 @@ function TodoItem({
         overdue && "border-upper-push-border/50"
       )}
     >
-      <div className="flex items-start gap-3 p-3 sm:p-4">
+      <div className="flex items-start gap-3 p-3">
         {/* Check button */}
         <button
           onClick={onToggle}
@@ -471,16 +471,14 @@ function TodoItem({
           <div className="flex items-start justify-between gap-2">
             <h3
               className={cn(
-                "text-[14px] font-medium m-0 break-words",
+                "text-[14px] font-medium m-0 break-words min-w-0",
                 isDone ? "text-text-dim line-through" : "text-text-primary"
               )}
             >
               {todo.title}
             </h3>
             <div className="flex items-center gap-1.5 shrink-0">
-              {/* Priority dot */}
               <div className={cn("w-2 h-2 rounded-full", PRIORITY_DOTS[todo.priority])} />
-              {/* Category badge */}
               <span
                 className={cn(
                   "text-[10px] font-mono font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded",
@@ -517,6 +515,9 @@ function TodoItem({
                 {todo.priority}
               </span>
             )}
+            {(todo.description || expanded) && (
+              <ChevronDown className={cn("w-3 h-3 text-text-dim ml-auto transition-transform", expanded && "rotate-180")} />
+            )}
           </div>
 
           {/* Expanded details */}
@@ -525,33 +526,25 @@ function TodoItem({
               {todo.description}
             </p>
           )}
-        </div>
 
-        {/* Actions */}
-        <div className="flex flex-col gap-1 shrink-0">
+          {/* Expanded actions */}
           {expanded && (
-            <>
+            <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border-default">
               <button
-                onClick={onEdit}
-                className="p-1.5 rounded-lg text-text-dim hover:text-ai hover:bg-ai-bg transition-colors"
+                onClick={(e) => { e.stopPropagation(); onEdit() }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-text-dim text-xs hover:text-ai hover:bg-ai-bg transition-colors"
               >
-                <Pencil className="w-3.5 h-3.5" />
+                <Pencil className="w-3 h-3" />
+                Edit
               </button>
               <button
-                onClick={onDelete}
-                className="p-1.5 rounded-lg text-text-dim hover:text-upper-push hover:bg-upper-push-bg transition-colors"
+                onClick={(e) => { e.stopPropagation(); onDelete() }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-text-dim text-xs hover:text-upper-push hover:bg-upper-push-bg transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3 h-3" />
+                Delete
               </button>
-            </>
-          )}
-          {(todo.description || expanded) && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
-            >
-              <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", expanded && "rotate-180")} />
-            </button>
+            </div>
           )}
         </div>
       </div>
@@ -711,7 +704,7 @@ export function Todos() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary">
+    <div className="min-h-screen bg-bg-primary overflow-x-hidden">
       <PageHeader
         title={
           <>
@@ -761,7 +754,7 @@ export function Todos() {
           </>
         }
       />
-      <div className="max-w-2xl mx-auto px-5 pb-4 border-b border-border-default">
+      <div className="max-w-2xl mx-auto px-5 pb-4 border-b border-border-default overflow-hidden">
         {/* Status filter pills */}
         <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
           {(["all", "pending", "done", "recurring"] as const).map((mode) => (
