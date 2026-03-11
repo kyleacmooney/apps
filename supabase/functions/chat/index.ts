@@ -52,7 +52,8 @@ async function verifyAuth(req: Request): Promise<string | null> {
 async function getSharedOAuthToken(userId: string): Promise<string | null> {
   const serviceRoleKey = Deno.env.get("CHAT_SUPABASE_SERVICE_ROLE_KEY");
   if (!serviceRoleKey) {
-    throw new Error("CHAT_SUPABASE_SERVICE_ROLE_KEY not configured");
+    // Service role key not configured; cannot fetch shared token server-side
+    return null;
   }
 
   const admin = createClient(
