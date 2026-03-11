@@ -1,20 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
-import { Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle, Copy, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/mobile/PageHeader'
 
-const GUIDES: Record<string, { title: string; subtitle: string; rawUrl: string }> = {
+const GUIDES: Record<string, { title: string; subtitle: string; rawUrl: string; prologue: string }> = {
   workouts: {
     title: 'Workout Logging',
     subtitle: 'Claude + Supabase MCP guide',
     rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/workout-logging-instructions.md',
+    prologue:
+      'Use this if you want Claude to log workouts into Supabase for you. It is optional: copy this guide into Claude when setting up, then come back here whenever you need a quick refresher.',
   },
   plants: {
     title: 'Plant Care',
     subtitle: 'Claude + Supabase MCP guide',
     rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/plant-care-instructions.md',
+    prologue:
+      'Use this if you want Claude to help research plants and update your plant tracker with MCP tools. It is optional and mainly useful during setup or when you need to repeat the workflow.',
   },
 }
 
@@ -24,6 +28,7 @@ export function Instructions() {
   const [content, setContent] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!config) {
@@ -58,6 +63,19 @@ export function Instructions() {
     return () => { cancelled = true }
   }, [config])
 
+  async function handleCopyAll() {
+    if (!content || !config) return
+    const text = `# ${config.title}\n\n${content}`
+
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setError('Could not copy to clipboard.')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-bg-primary">
       <PageHeader
@@ -69,6 +87,30 @@ export function Instructions() {
       />
 
       <div className="max-w-lg mx-auto px-5 py-6">
+        {config && (
+          <div className="mb-4 rounded-xl border border-border-default bg-bg-secondary px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm text-text-secondary leading-relaxed m-0">{config.prologue}</p>
+              <button
+                onClick={() => void handleCopyAll()}
+                disabled={!content || loading}
+                className={cn(
+                  'shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors',
+                  'border border-border-default',
+                  copied
+                    ? 'bg-upper-pull/10 text-upper-pull border-upper-pull/30'
+                    : 'bg-bg-primary text-text-secondary hover:border-border-hover',
+                  (!content || loading) && 'opacity-50 cursor-not-allowed hover:border-border-default',
+                )}
+                title="Copy all guide text"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Copied' : 'Copy all'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading && (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-text-muted" />

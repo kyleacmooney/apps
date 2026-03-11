@@ -800,6 +800,13 @@ export function Exercises() {
         sticky
         rightActions={
           <>
+            <Link
+              to="/instructions/workouts"
+              className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors no-underline"
+              title="Guide"
+            >
+              <BookOpen className="w-4 h-4" />
+            </Link>
             <button
               onClick={() => {
                 setSessionHistoryCache(new Map())
@@ -824,16 +831,6 @@ export function Exercises() {
         }
       />
       <div className="max-w-2xl mx-auto px-5 pt-4">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <Link
-            to="/instructions/workouts"
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xs font-semibold hover:border-border-hover transition-colors no-underline"
-          >
-            <BookOpen className="w-4 h-4 text-text-dim" />
-            Guide
-          </Link>
-        </div>
-
         {/* Search */}
         <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" />

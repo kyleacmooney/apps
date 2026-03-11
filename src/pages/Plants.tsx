@@ -1567,6 +1567,13 @@ export function Plants() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                to="/instructions/plants"
+                className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors"
+                title="Guide"
+              >
+                <Leaf className="w-4 h-4" />
+              </Link>
               <button
                 onClick={handleRefresh}
                 className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors cursor-pointer"
@@ -1582,16 +1589,6 @@ export function Plants() {
                 <Plus className="w-4.5 h-4.5" />
               </button>
             </div>
-          </div>
-
-          <div className="mt-3">
-            <Link
-              to="/instructions/plants"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xs font-semibold hover:border-border-hover transition-colors no-underline"
-            >
-              <Leaf className="w-4 h-4 text-text-dim" />
-              Guide
-            </Link>
           </div>
 
           {/* Tabs */}

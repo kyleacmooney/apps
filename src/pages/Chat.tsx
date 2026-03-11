@@ -554,12 +554,6 @@ export function Chat() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <Link
-              to="/"
-              className="text-text-muted hover:text-text-primary transition-colors"
-            >
-              <Home className="w-5 h-5" />
-            </Link>
           </div>
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-ai" />
@@ -569,13 +563,22 @@ export function Chat() {
                 : "AI Chat"}
             </h1>
           </div>
-          <button
-            onClick={clearChat}
-            className="text-text-muted hover:text-text-primary transition-colors"
-            title="New chat"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearChat}
+              className="text-text-muted hover:text-text-primary transition-colors"
+              title="New chat"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+            <Link
+              to="/"
+              className="text-text-muted hover:text-text-primary transition-colors"
+              title="Home"
+            >
+              <Home className="w-5 h-5" />
+            </Link>
+          </div>
         </div>
       </div>
 
