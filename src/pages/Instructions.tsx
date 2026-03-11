@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
-import { Home, ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/mobile/PageHeader'
 
 const GUIDES: Record<string, { title: string; subtitle: string; rawUrl: string }> = {
   workouts: {
@@ -18,7 +19,6 @@ const GUIDES: Record<string, { title: string; subtitle: string; rawUrl: string }
 }
 
 export function Instructions() {
-  const navigate = useNavigate()
   const { guide } = useParams<{ guide: string }>()
   const config = guide ? GUIDES[guide] : undefined
   const [content, setContent] = useState<string | null>(null)
@@ -60,32 +60,13 @@ export function Instructions() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      <div className="border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
-        <div className="max-w-lg mx-auto px-5 pt-4 pb-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/')}
-              className="text-text-muted hover:text-text-primary transition-colors"
-            >
-              <Home className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => navigate(-1)}
-              className="text-text-muted hover:text-text-primary transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                {config?.title ?? 'Guide'}
-              </h1>
-              <p className="text-text-dim text-xs m-0">
-                {config?.subtitle ?? 'Instructions'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={config?.title ?? 'Guide'}
+        subtitle={config?.subtitle ?? 'Instructions'}
+        sticky
+        showHome
+        showBack
+      />
 
       <div className="max-w-lg mx-auto px-5 py-6">
         {loading && (

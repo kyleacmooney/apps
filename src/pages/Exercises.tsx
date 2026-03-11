@@ -5,9 +5,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useDataClient } from "@/context/SupabaseContext"
 import { CATEGORIES, getCategoryStyle } from "@/lib/categories"
 import { formatSet, formatDuration, relativeDate, parseLocalDate, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, ArrowRight, Search, ChevronDown, ChevronRight, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw, Home } from "lucide-react"
+import { ArrowRight, Search, ChevronDown, ChevronRight, Target, AlertTriangle, BarChart3, TrendingUp, StickyNote, Trophy, History, BookOpen, X, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
+import { PageHeader } from "@/components/mobile/PageHeader"
 
 /** Render simple inline markdown (**bold**, *italic*) as React elements */
 function renderMarkdown(text: string): React.ReactNode[] {
@@ -784,70 +785,57 @@ export function Exercises() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-10 border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
-        <div className="max-w-2xl mx-auto px-5 pt-4 pb-4">
-          {/* Back + Title */}
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-3">
+      <PageHeader
+        title={
+          <>
+            <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+              Exercise Encyclopedia
+            </h1>
+            <span className="text-text-dim text-xs font-mono font-medium">
+              {exercises.length}
+            </span>
+          </>
+        }
+        subtitle="Form cues, progressions & notes"
+        sticky
+        rightActions={
+          <>
+            <button
+              onClick={() => {
+                setSessionHistoryCache(new Map())
+                setSessionHistoryOpenId(null)
+                queryClient.invalidateQueries({ queryKey: ['exercises'] })
+              }}
+              className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+            </button>
+            {canGoForward && (
               <button
-                onClick={() => navigate("/")}
-                className="text-text-muted hover:text-text-primary transition-colors"
+                onClick={() => navigate(1)}
+                className="w-11 h-11 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors"
+                title="Forward"
               >
-                <Home className="w-4 h-4" />
+                <ArrowRight className="w-5 h-5" />
               </button>
-              <button
-                onClick={() => navigate(-1)}
-                className="text-text-muted hover:text-text-primary transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <div className="flex items-baseline gap-2.5">
-                  <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                    Exercise Encyclopedia
-                  </h1>
-                  <span className="text-text-dim text-xs font-mono font-medium">
-                    {exercises.length}
-                  </span>
-                </div>
-                <p className="text-text-dim text-xs m-0">
-                  Form cues, progressions & notes
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                to="/instructions/workouts"
-                className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
-                title="Logging guide"
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-              </Link>
-              <button
-                onClick={() => {
-                  setSessionHistoryCache(new Map())
-                  setSessionHistoryOpenId(null)
-                  queryClient.invalidateQueries({ queryKey: ['exercises'] })
-                }}
-                className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
-              >
-                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-              </button>
-              {canGoForward && (
-                <button
-                  onClick={() => navigate(1)}
-                  className="text-text-muted hover:text-text-primary transition-colors"
-                >
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="h-3" />
+            )}
+          </>
+        }
+      />
+      <div className="max-w-2xl mx-auto px-5 pt-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <Link
+            to="/instructions/workouts"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xs font-semibold hover:border-border-hover transition-colors no-underline"
+          >
+            <BookOpen className="w-4 h-4 text-text-dim" />
+            Guide
+          </Link>
+        </div>
 
-          {/* Search */}
-          <div className="relative mb-3">
+        {/* Search */}
+        <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" />
             <input
               type="text"
@@ -864,10 +852,10 @@ export function Exercises() {
                 <X className="w-4 h-4" />
               </button>
             )}
-          </div>
+        </div>
 
-          {/* Category filters — tap to select, long-press to exclude */}
-          <CategoryFilterRow
+        {/* Category filters — tap to select, long-press to exclude */}
+        <CategoryFilterRow
             categories={CATEGORIES}
             activeCategory={activeCategory}
             excludedCategories={excludedCategories}
@@ -896,10 +884,10 @@ export function Exercises() {
               const excludeStr = [...next].join(",") || null
               updateParams({ exclude: excludeStr })
             }}
-          />
+        />
 
-          {/* Sort options */}
-          <div className="flex items-center gap-2 mt-2.5 select-none">
+        {/* Sort options */}
+        <div className="flex items-center gap-2 mt-2.5 select-none">
             <span className="text-text-dim text-[11px] font-mono">Sort:</span>
             {SORT_OPTIONS.map((opt) => (
               <button
@@ -915,7 +903,6 @@ export function Exercises() {
                 {opt.label}
               </button>
             ))}
-          </div>
         </div>
       </div>
 

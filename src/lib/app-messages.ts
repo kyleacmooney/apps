@@ -7,6 +7,12 @@ export interface AppMessage {
 }
 
 const READ_KEY = 'app-messages-read'
+const HOME_ACK_KEY = 'app-messages-home-ack'
+const CHANGE_EVENT = 'app-messages-changed'
+
+function emitChange() {
+  window.dispatchEvent(new Event(CHANGE_EVENT))
+}
 
 function getReadIds(): Set<string> {
   try {
@@ -19,6 +25,21 @@ function getReadIds(): Set<string> {
 
 function setReadIds(ids: Set<string>) {
   localStorage.setItem(READ_KEY, JSON.stringify([...ids]))
+  emitChange()
+}
+
+function getHomeAckIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HOME_ACK_KEY)
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function setHomeAckIds(ids: Set<string>) {
+  localStorage.setItem(HOME_ACK_KEY, JSON.stringify([...ids]))
+  emitChange()
 }
 
 export function getBuiltInMessages(): AppMessage[] {
@@ -39,6 +60,7 @@ export function markMessageRead(id: string) {
   const ids = getReadIds()
   ids.add(id)
   setReadIds(ids)
+  acknowledgeHomeMessage(id)
 }
 
 export function markAllMessagesRead() {
@@ -47,6 +69,11 @@ export function markAllMessagesRead() {
     ids.add(msg.id)
   }
   setReadIds(ids)
+  const ackIds = getHomeAckIds()
+  for (const msg of getBuiltInMessages()) {
+    ackIds.add(msg.id)
+  }
+  setHomeAckIds(ackIds)
 }
 
 export function getUnreadCount(): number {
@@ -57,4 +84,20 @@ export function resetMessageRead(id: string) {
   const ids = getReadIds()
   ids.delete(id)
   setReadIds(ids)
+}
+
+export function acknowledgeHomeMessage(id: string) {
+  const ids = getHomeAckIds()
+  ids.add(id)
+  setHomeAckIds(ids)
+}
+
+export function getHomeMessages(): AppMessage[] {
+  const ackIds = getHomeAckIds()
+  return getBuiltInMessages().filter((m) => !ackIds.has(m.id))
+}
+
+export function addMessagesChangeListener(listener: () => void) {
+  window.addEventListener(CHANGE_EVENT, listener)
+  return () => window.removeEventListener(CHANGE_EVENT, listener)
 }

@@ -668,7 +668,7 @@ export function Chat() {
             onKeyDown={handleKeyDown}
             placeholder={tokenLoading ? "Loading…" : hasToken ? "Ask anything..." : "Set up token in Settings first"}
             rows={1}
-            className="flex-1 resize-none rounded-xl border border-border-default bg-bg-primary px-4 py-2.5 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-ai-border transition-colors field-sizing-content max-h-32"
+            className="flex-1 resize-none rounded-xl border border-border-default bg-bg-primary px-4 py-2.5 text-base text-text-primary placeholder:text-text-dim focus:outline-none focus:border-ai-border transition-colors field-sizing-content max-h-32"
             disabled={isStreaming || !hasToken || tokenLoading}
           />
           {isStreaming ? (

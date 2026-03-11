@@ -1565,17 +1565,10 @@ export function Plants() {
                 <h1 className="text-lg font-semibold text-text-primary">Plants</h1>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Link
-                to="/instructions/plants"
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors"
-                title="Care guide"
-              >
-                <Leaf className="w-4 h-4" />
-              </Link>
+            <div className="flex items-center gap-2">
               <button
                 onClick={handleRefresh}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors cursor-pointer"
+                className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors cursor-pointer"
               >
                 <RefreshCw
                   className={cn('w-4 h-4', isRefreshing && 'animate-spin')}
@@ -1583,11 +1576,21 @@ export function Plants() {
               </button>
               <button
                 onClick={() => setAddPlantOpen(true)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-plant/15 text-plant hover:bg-plant/25 transition-colors cursor-pointer"
+                className="w-11 h-11 flex items-center justify-center rounded-lg bg-plant/15 text-plant hover:bg-plant/25 transition-colors cursor-pointer"
               >
                 <Plus className="w-4.5 h-4.5" />
               </button>
             </div>
+          </div>
+
+          <div className="mt-3">
+            <Link
+              to="/instructions/plants"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xs font-semibold hover:border-border-hover transition-colors no-underline"
+            >
+              <Leaf className="w-4 h-4 text-text-dim" />
+              Guide
+            </Link>
           </div>
 
           {/* Tabs */}

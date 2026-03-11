@@ -10,7 +10,6 @@ import {
   Check,
   Copy,
   ExternalLink,
-  Home,
   Loader2,
   Database,
   Key,
@@ -20,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/mobile/PageHeader'
 
 const SCHEMA_RAW_URL = 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/schema.sql'
 const SCHEMA_AUTH_RAW_URL = 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/schema-auth.sql'
@@ -107,46 +107,12 @@ export function Setup() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      <div className="border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
-        <div className="max-w-lg mx-auto px-5 pt-4 pb-4">
-          <div className="flex items-center gap-3">
-            {step === 1 ? (
-              <>
-                <button
-                  onClick={() => navigate('/')}
-                  className="text-text-muted hover:text-text-primary transition-colors"
-                  aria-label="Home"
-                >
-                  <Home className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => navigate(-1)}
-                  className="text-text-muted hover:text-text-primary transition-colors"
-                  aria-label="Back"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => navigate('/')}
-                className="text-text-muted hover:text-text-primary transition-colors"
-                aria-label="Home"
-              >
-                <Home className="w-4 h-4" />
-              </button>
-            )}
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                Set up your backend
-              </h1>
-              <p className="text-text-dim text-xs m-0">
-                Step {step} of {STEPS.length}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Set up your backend"
+        subtitle={`Step ${step} of ${STEPS.length}`}
+        sticky
+        showBack={step === 1}
+      />
 
       {/* Step indicator */}
       <div className="max-w-lg mx-auto px-5 pt-4">

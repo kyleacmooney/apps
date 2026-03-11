@@ -6,10 +6,9 @@ import { useDataClient } from "@/context/SupabaseContext"
 import { useAuth } from "@/context/AuthContext"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/mobile/PageHeader"
 import {
-  ArrowLeft,
   ArrowRight,
-  Home,
   RefreshCw,
   Plus,
   Check,
@@ -161,7 +160,7 @@ function AddTodoForm({
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") handleSubmit() }}
         placeholder="What needs to be done?"
-        className="w-full bg-transparent text-text-primary text-[15px] font-medium placeholder:text-text-dim outline-none mb-3"
+        className="w-full bg-transparent text-text-primary text-base font-medium placeholder:text-text-dim outline-none mb-3"
       />
 
       <textarea
@@ -169,7 +168,7 @@ function AddTodoForm({
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Notes (optional)"
         rows={2}
-        className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm placeholder:text-text-dim outline-none border border-border-default focus:border-border-hover resize-none mb-3"
+        className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base placeholder:text-text-dim outline-none border border-border-default focus:border-border-hover resize-none mb-3"
       />
 
       <div className="flex flex-wrap gap-2 mb-3">
@@ -178,7 +177,7 @@ function AddTodoForm({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as Category)}
-            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -191,7 +190,7 @@ function AddTodoForm({
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as Priority)}
-            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
           >
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>{p}</option>
@@ -200,25 +199,25 @@ function AddTodoForm({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-3">
-        <div className="flex-1 min-w-[130px]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+        <div className="min-w-0">
           <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Due date</label>
           <input
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm border border-border-default focus:border-border-hover outline-none"
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
           />
         </div>
 
-        <div className="flex-1 min-w-[110px]">
+        <div className="min-w-0">
           <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Recurring</label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setIsRecurring(!isRecurring)}
               className={cn(
-                "px-3 py-2 rounded-lg border text-sm transition-colors",
+                "px-3 py-2 rounded-lg border text-base transition-colors",
                 isRecurring
                   ? "bg-ai-bg border-ai-border text-ai"
                   : "bg-bg-elevated border-border-default text-text-dim"
@@ -230,7 +229,7 @@ function AddTodoForm({
               <select
                 value={recurringInterval}
                 onChange={(e) => setRecurringInterval(e.target.value as "daily" | "weekly" | "monthly")}
-                className="flex-1 bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
+                className="flex-1 min-w-[140px] bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
               >
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
@@ -304,7 +303,7 @@ function EditTodoForm({
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") handleSubmit() }}
         placeholder="What needs to be done?"
-        className="w-full bg-transparent text-text-primary text-[15px] font-medium placeholder:text-text-dim outline-none mb-3"
+        className="w-full bg-transparent text-text-primary text-base font-medium placeholder:text-text-dim outline-none mb-3"
       />
 
       <textarea
@@ -312,7 +311,7 @@ function EditTodoForm({
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Notes (optional)"
         rows={2}
-        className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm placeholder:text-text-dim outline-none border border-border-default focus:border-border-hover resize-none mb-3"
+        className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base placeholder:text-text-dim outline-none border border-border-default focus:border-border-hover resize-none mb-3"
       />
 
       <div className="flex flex-wrap gap-2 mb-3">
@@ -321,7 +320,7 @@ function EditTodoForm({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as Category)}
-            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -334,7 +333,7 @@ function EditTodoForm({
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as Priority)}
-            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
           >
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>{p}</option>
@@ -343,25 +342,25 @@ function EditTodoForm({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-3">
-        <div className="flex-1 min-w-[130px]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+        <div className="min-w-0">
           <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Due date</label>
           <input
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm border border-border-default focus:border-border-hover outline-none"
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
           />
         </div>
 
-        <div className="flex-1 min-w-[110px]">
+        <div className="min-w-0">
           <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Recurring</label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setIsRecurring(!isRecurring)}
               className={cn(
-                "px-3 py-2 rounded-lg border text-sm transition-colors",
+                "px-3 py-2 rounded-lg border text-base transition-colors",
                 isRecurring
                   ? "bg-ai-bg border-ai-border text-ai"
                   : "bg-bg-elevated border-border-default text-text-dim"
@@ -373,7 +372,7 @@ function EditTodoForm({
               <select
                 value={recurringInterval}
                 onChange={(e) => setRecurringInterval(e.target.value as "daily" | "weekly" | "monthly")}
-                className="flex-1 bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-sm border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
+                className="flex-1 min-w-[140px] bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none capitalize appearance-none"
               >
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
@@ -712,122 +711,110 @@ export function Todos() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      {/* Header */}
-      <div className="sticky top-0 border-b border-border-default bg-bg-primary/95 backdrop-blur-sm z-10">
-        <div className="max-w-2xl mx-auto px-5 pt-4 pb-4">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigate("/")}
-                className="text-text-muted hover:text-text-primary transition-colors"
-              >
-                <Home className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => navigate(-1)}
-                className="text-text-muted hover:text-text-primary transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <div className="flex items-baseline gap-2.5">
-                  <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                    Todos
-                  </h1>
-                  <span className="text-text-dim text-xs font-mono font-medium">
-                    {filterMode === "all" && categoryFilter === "all"
-                      ? statusCounts.pending
-                      : filteredTodos.filter((t) => t.status !== "done").length}{" "}
-                    active
-                  </span>
-                </div>
-                <p className="text-text-dim text-xs m-0">Daily tasks & responsibilities</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => queryClient.invalidateQueries({ queryKey: ["todos"] })}
-                className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
-              >
-                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-              </button>
-              <button
-                onClick={() => setShowAddForm(!showAddForm)}
-                className={cn(
-                  "p-1.5 rounded-lg transition-colors",
-                  showAddForm
-                    ? "text-ai bg-ai-bg"
-                    : "text-text-dim hover:text-ai"
-                )}
-              >
-                {showAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              </button>
-              {canGoForward && (
-                <button
-                  onClick={() => navigate(1)}
-                  className="text-text-muted hover:text-text-primary transition-colors"
-                >
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Status filter pills */}
-          <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
-            {(["all", "pending", "done", "recurring"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setFilterMode(mode)}
-                className={cn(
-                  "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap capitalize transition-all",
-                  filterMode === mode
-                    ? "border-ai-border bg-ai-bg text-ai"
-                    : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-                )}
-              >
-                {mode === "all" ? "All" : mode === "pending" ? "Active" : mode === "done" ? "Done" : "Recurring"}
-                <span className="ml-1 opacity-60 font-mono text-[11px]">
-                  {statusCounts[mode] ?? 0}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* Category filter pills */}
-          <div className="flex gap-1.5 overflow-x-auto mt-2 -mx-5 px-5 scrollbar-none">
+      <PageHeader
+        title={
+          <>
+            <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+              Todos
+            </h1>
+            <span className="text-text-dim text-xs font-mono font-medium">
+              {filterMode === "all" && categoryFilter === "all"
+                ? statusCounts.pending
+                : filteredTodos.filter((t) => t.status !== "done").length}{" "}
+              active
+            </span>
+          </>
+        }
+        subtitle="Daily tasks & responsibilities"
+        sticky
+        rightActions={
+          <>
             <button
-              onClick={() => setCategoryFilter("all")}
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["todos"] })}
+              className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+            </button>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
               className={cn(
-                "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-all",
-                categoryFilter === "all"
-                  ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
+                "w-11 h-11 flex items-center justify-center rounded-lg transition-colors",
+                showAddForm
+                  ? "text-ai bg-ai-bg"
+                  : "text-text-dim hover:text-ai hover:bg-bg-secondary"
+              )}
+              title={showAddForm ? "Close form" : "Add todo"}
+            >
+              {showAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            </button>
+            {canGoForward && (
+              <button
+                onClick={() => navigate(1)}
+                className="w-11 h-11 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors"
+                title="Forward"
+              >
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            )}
+          </>
+        }
+      />
+      <div className="max-w-2xl mx-auto px-5 pb-4 border-b border-border-default">
+        {/* Status filter pills */}
+        <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
+          {(["all", "pending", "done", "recurring"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setFilterMode(mode)}
+              className={cn(
+                "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap capitalize transition-all",
+                filterMode === mode
+                  ? "border-ai-border bg-ai-bg text-ai"
                   : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
               )}
             >
-              All
+              {mode === "all" ? "All" : mode === "pending" ? "Active" : mode === "done" ? "Done" : "Recurring"}
+              <span className="ml-1 opacity-60 font-mono text-[11px]">
+                {statusCounts[mode] ?? 0}
+              </span>
             </button>
-            {CATEGORIES.map((cat) => {
-              const colors = CATEGORY_COLORS[cat]
-              const count = todos.filter((t) => t.category === cat).length
-              if (count === 0 && categoryFilter !== cat) return null
-              return (
-                <button
-                  key={cat}
-                  onClick={() => setCategoryFilter(cat)}
-                  className={cn(
-                    "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap capitalize transition-all",
-                    categoryFilter === cat
-                      ? cn(colors.text, colors.bg, colors.border)
-                      : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-                  )}
-                >
-                  {cat}
-                  <span className="ml-1 opacity-60 font-mono">{count}</span>
-                </button>
-              )
-            })}
-          </div>
+          ))}
+        </div>
+
+        {/* Category filter pills */}
+        <div className="flex gap-1.5 overflow-x-auto mt-2 -mx-5 px-5 scrollbar-none">
+          <button
+            onClick={() => setCategoryFilter("all")}
+            className={cn(
+              "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-all",
+              categoryFilter === "all"
+                ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
+                : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+            )}
+          >
+            All
+          </button>
+          {CATEGORIES.map((cat) => {
+            const colors = CATEGORY_COLORS[cat]
+            const count = todos.filter((t) => t.category === cat).length
+            if (count === 0 && categoryFilter !== cat) return null
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter(cat)}
+                className={cn(
+                  "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap capitalize transition-all",
+                  categoryFilter === cat
+                    ? cn(colors.text, colors.bg, colors.border)
+                    : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+                )}
+              >
+                {cat}
+                <span className="ml-1 opacity-60 font-mono">{count}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 

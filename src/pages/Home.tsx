@@ -3,9 +3,30 @@ import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings } from "@/context/SupabaseContext"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
-import { getUnreadCount } from "@/lib/app-messages"
+import {
+  acknowledgeHomeMessage,
+  addMessagesChangeListener,
+  getHomeMessages,
+  getUnreadCount,
+  markMessageRead,
+} from "@/lib/app-messages"
 import { cn } from "@/lib/utils"
-import { Dumbbell, BookOpen, LogIn, LogOut, ArrowRight, Sprout, Settings, Database, Check, Sparkles, ListTodo, Bell, ChevronRight } from "lucide-react"
+import {
+  Dumbbell,
+  BookOpen,
+  LogIn,
+  LogOut,
+  ArrowRight,
+  Sprout,
+  Settings,
+  Database,
+  Check,
+  Sparkles,
+  ListTodo,
+  Bell,
+  ChevronRight,
+  X,
+} from "lucide-react"
 
 export function Home() {
   const { user, signIn, signOut } = useAuth()
@@ -13,19 +34,42 @@ export function Home() {
   const navigate = useNavigate()
   const canGoForward = useCanGoForward()
   const [unreadCount, setUnreadCount] = useState(0)
+  const [homeMessages, setHomeMessages] = useState(getHomeMessages())
 
   useEffect(() => {
-    setUnreadCount(getUnreadCount())
+    const updateMessages = () => {
+      setUnreadCount(getUnreadCount())
+      setHomeMessages(getHomeMessages())
+    }
+    updateMessages()
+    return addMessagesChangeListener(updateMessages)
   }, [])
 
   const backendStatusLabel = isExternalBackend
     ? authMode === 'external-authed' ? 'Connected (Secure)' : authMode === 'external-anon' ? 'Connected (Anon)' : authMode === 'external-error' ? 'Auth error' : 'Connected'
     : 'Using shared backend'
 
+  const dismissFromHome = (id: string) => {
+    acknowledgeHomeMessage(id)
+    markMessageRead(id)
+  }
+
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col">
       {/* Auth bar */}
       <div className="flex items-center justify-end gap-3 p-4 flex-wrap">
+        <Link
+          to="/messages"
+          className="relative flex items-center justify-center w-10 h-10 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors"
+          title="Messages"
+        >
+          <Bell className="w-5 h-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-upper-pull text-bg-primary text-[10px] font-bold">
+              {unreadCount}
+            </span>
+          )}
+        </Link>
         {user && !settingsLoading && (
           <span
             className={cn(
@@ -78,6 +122,46 @@ export function Home() {
           Apps
         </h1>
         <p className="text-text-muted text-sm mb-6">Personal tools</p>
+
+        {/* Home surfaced messages */} 
+        {homeMessages.length > 0 && (
+          <div className="w-full max-w-md mb-4">
+            {homeMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className="rounded-xl border border-upper-pull-border bg-upper-pull-bg/30 p-4 relative"
+              >
+                <button
+                  onClick={() => dismissFromHome(msg.id)}
+                  className="absolute top-3 right-3 text-text-dim hover:text-text-muted transition-colors"
+                  title="Dismiss"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <h3 className="text-sm font-semibold text-text-primary pr-6 mb-1.5">
+                  {msg.title}
+                </h3>
+                <p className="text-xs leading-relaxed text-text-secondary mb-3">
+                  {msg.content}
+                </p>
+                <div className="flex gap-2">
+                  <Link
+                    to="/messages"
+                    className="px-3 py-1.5 rounded-lg bg-upper-pull text-bg-primary text-xs font-semibold hover:brightness-110 transition-all no-underline"
+                  >
+                    View all
+                  </Link>
+                  <button
+                    onClick={() => dismissFromHome(msg.id)}
+                    className="px-3 py-1.5 rounded-lg border border-upper-pull-border text-upper-pull text-xs font-semibold hover:bg-upper-pull-bg/50 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* App grid — 2 columns */}
         <div className="grid grid-cols-2 gap-3 w-full max-w-md">
@@ -144,24 +228,6 @@ export function Home() {
             <p className="text-text-muted text-[11px] text-center mt-0.5">
               Ask anything
             </p>
-          </Link>
-
-          <Link
-            to="/messages"
-            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-upper-pull-border transition-all duration-200 no-underline aspect-square relative"
-          >
-            <Bell className="w-9 h-9 text-upper-pull mb-2.5 group-hover:scale-110 transition-transform" />
-            <h2 className="text-sm font-semibold text-text-primary text-center">
-              Messages
-            </h2>
-            <p className="text-text-muted text-[11px] text-center mt-0.5">
-              Notifications
-            </p>
-            {unreadCount > 0 && (
-              <span className="absolute top-3 right-3 inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded-full bg-upper-pull text-bg-primary text-[11px] font-bold">
-                {unreadCount}
-              </span>
-            )}
           </Link>
         </div>
 

@@ -4,9 +4,10 @@ import { usePersistedState } from "@/lib/use-persisted-state"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useDataClient } from "@/context/SupabaseContext"
 import { formatSet, parseLocalDate, getWeekStartStr, getWeekLabel, type TrendSet } from "@/lib/workout-utils"
-import { ArrowLeft, ArrowRight, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X, Home } from "lucide-react"
+import { ArrowRight, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronRight, Trophy, MapPin, Clock, List, RefreshCw, ChevronsDownUp, ChevronsUpDown, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
+import { PageHeader } from "@/components/mobile/PageHeader"
 
 interface WorkoutSet extends TrendSet {
   id: string
@@ -1061,100 +1062,87 @@ export function Workouts() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      {/* Header — sticky in list view */}
-      <div className={cn(
-        "border-b border-border-default bg-bg-primary/95 backdrop-blur-sm z-10",
-        viewMode === "list" && "sticky top-0"
-      )}>
-        <div className="max-w-2xl mx-auto px-5 pt-4 pb-4">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigate("/")}
-                className="text-text-muted hover:text-text-primary transition-colors"
-              >
-                <Home className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => navigate(-1)}
-                className="text-text-muted hover:text-text-primary transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <div className="flex items-baseline gap-2.5">
-                  <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                    Workout Sessions
-                  </h1>
-                  {viewMode === "list" && (
-                    <span className="text-text-dim text-xs font-mono font-medium">
-                      {activeFilter === "all" && excludedTypes.size === 0
-                        ? sessions.length
-                        : `${filteredCount} / ${sessions.length}`}
-                    </span>
-                  )}
-                </div>
-                <p className="text-text-dim text-xs m-0">
-                  {viewMode === "list" ? "Recent training history" : "Monthly overview"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                to="/instructions/workouts"
-                className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
-                title="Logging guide"
-              >
-                <FileText className="w-3.5 h-3.5" />
-              </Link>
-              <button
-                onClick={() => {
-                  queryClient.invalidateQueries({ queryKey: ['workouts'] })
-                }}
-                className="p-1.5 rounded-lg text-text-dim hover:text-text-muted transition-colors"
-              >
-                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-              </button>
+      <PageHeader
+        title={
+          <>
+            <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+              Workout Sessions
+            </h1>
+            {viewMode === "list" && (
+              <span className="text-text-dim text-xs font-mono font-medium">
+                {activeFilter === "all" && excludedTypes.size === 0
+                  ? sessions.length
+                  : `${filteredCount} / ${sessions.length}`}
+              </span>
+            )}
+          </>
+        }
+        subtitle={viewMode === "list" ? "Recent training history" : "Monthly overview"}
+        sticky={viewMode === "list"}
+        rightActions={
+          <>
+            <button
+              onClick={() => {
+                queryClient.invalidateQueries({ queryKey: ['workouts'] })
+              }}
+              className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+            </button>
             <div className="flex rounded-lg border border-border-default overflow-hidden">
               <button
                 onClick={() => setSearchParams({}, { replace: true })}
                 className={cn(
-                  "p-1.5 transition-colors",
+                  "w-11 h-11 flex items-center justify-center transition-colors",
                   viewMode === "list"
                     ? "bg-bg-elevated text-text-primary"
-                    : "text-text-dim hover:text-text-muted"
+                    : "text-text-dim hover:text-text-muted hover:bg-bg-secondary"
                 )}
+                title="List view"
               >
                 <List className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setSearchParams({ view: "calendar" }, { replace: true })}
                 className={cn(
-                  "p-1.5 transition-colors",
+                  "w-11 h-11 flex items-center justify-center transition-colors",
                   viewMode === "calendar"
                     ? "bg-bg-elevated text-text-primary"
-                    : "text-text-dim hover:text-text-muted"
+                    : "text-text-dim hover:text-text-muted hover:bg-bg-secondary"
                 )}
+                title="Calendar view"
               >
                 <Calendar className="w-4 h-4" />
               </button>
-              </div>
-              {canGoForward && (
-                <button
-                  onClick={() => navigate(1)}
-                  className="text-text-muted hover:text-text-primary transition-colors"
-                >
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-              )}
             </div>
-          </div>
-
-          {/* Session type filter pills — list view only */}
-          {viewMode === "list" && (
-            <div className="select-none">
-              <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
-                {allTypes.map((type) => {
+            {canGoForward && (
+              <button
+                onClick={() => navigate(1)}
+                className="w-11 h-11 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors"
+                title="Forward"
+              >
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            )}
+          </>
+        }
+      />
+      <div className="max-w-2xl mx-auto px-5 pt-3">
+        <Link
+          to="/instructions/workouts"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xs font-semibold hover:border-border-hover transition-colors no-underline"
+        >
+          <FileText className="w-4 h-4 text-text-dim" />
+          Guide
+        </Link>
+      </div>
+      {/* Session type filter pills — list view only */}
+      {viewMode === "list" && (
+        <div className="max-w-2xl mx-auto px-5 pb-4 border-b border-border-default">
+          <div className="select-none">
+            <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
+              {allTypes.map((type) => {
                   const isActive = activeFilter === type
                   const isExcluded = type !== "all" && excludedTypes.has(type)
                   const count = type === "all"
@@ -1197,22 +1185,21 @@ export function Workouts() {
                       }}
                     />
                   )
-                })}
-              </div>
-              {activeFilter === "all" && excludedTypes.size === 0 && (
+              })}
+            </div>
+            {activeFilter === "all" && excludedTypes.size === 0 && (
                 <p className="text-text-dim text-[10px] font-mono mt-1.5 ml-0.5 opacity-60">
                   Hold a type to exclude it
                 </p>
               )}
-              {activeFilter === "all" && excludedTypes.size > 0 && (
-                <p className="text-upper-push/60 text-[10px] font-mono mt-1.5 ml-0.5">
-                  {excludedTypes.size} excluded — tap to restore
-                </p>
-              )}
-            </div>
-          )}
+            {activeFilter === "all" && excludedTypes.size > 0 && (
+              <p className="text-upper-push/60 text-[10px] font-mono mt-1.5 ml-0.5">
+                {excludedTypes.size} excluded — tap to restore
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content */}
       <div className="max-w-2xl mx-auto px-5 py-4 pb-10">

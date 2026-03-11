@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Home, ArrowLeft, Bell, Check, CheckCheck, MailOpen } from 'lucide-react'
-import { getBuiltInMessages, markMessageRead, markAllMessagesRead, resetMessageRead, type AppMessage } from '@/lib/app-messages'
+import { Bell, Check, CheckCheck, MailOpen } from 'lucide-react'
+import { getBuiltInMessages, markMessageRead, markAllMessagesRead, resetMessageRead, addMessagesChangeListener, type AppMessage } from '@/lib/app-messages'
 import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/mobile/PageHeader'
 
 export function Messages() {
-  const navigate = useNavigate()
   const [messages, setMessages] = useState<AppMessage[]>([])
 
   useEffect(() => {
-    setMessages(getBuiltInMessages())
+    const updateMessages = () => {
+      setMessages(getBuiltInMessages())
+    }
+    updateMessages()
+    return addMessagesChangeListener(updateMessages)
   }, [])
 
   const unreadCount = messages.filter((m) => !m.read).length
@@ -31,41 +34,25 @@ export function Messages() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      <div className="border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
-        <div className="max-w-lg mx-auto px-5 pt-4 pb-4">
-          <div className="flex items-center gap-3">
+      <PageHeader
+        title="Messages"
+        subtitle="App notifications & updates"
+        sticky
+        rightActions={
+          unreadCount > 0 ? (
             <button
-              onClick={() => navigate('/')}
-              className="text-text-muted hover:text-text-primary transition-colors"
+              onClick={handleMarkAllRead}
+              className="px-3 py-2 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xs font-semibold hover:border-border-hover transition-colors"
+              title="Mark all as read"
             >
-              <Home className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => navigate(-1)}
-              className="text-text-muted hover:text-text-primary transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex-1">
-              <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
-                Messages
-              </h1>
-              <p className="text-text-dim text-xs m-0">
-                App notifications & updates
-              </p>
-            </div>
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllRead}
-                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
-              >
-                <CheckCheck className="w-4 h-4" />
+              <span className="inline-flex items-center gap-2">
+                <CheckCheck className="w-4 h-4 text-text-dim" />
                 Mark all read
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+              </span>
+            </button>
+          ) : null
+        }
+      />
 
       <div className="max-w-lg mx-auto px-5 py-6">
         {messages.length === 0 ? (
