@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "promote": "gh workflow run promote-to-prod.yml && echo 'Triggered. Watch: gh run list --workflow=promote-to-prod.yml'",
-    "sync": "bash scripts/sync.sh"
+    "sync": "bash scripts/sync.sh",
+    "branch-diff": "bash scripts/branch-diff.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

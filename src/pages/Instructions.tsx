@@ -11,14 +11,14 @@ const GUIDES: Record<string, { title: string; subtitle: string; rawUrl: string; 
     subtitle: 'Claude + Supabase MCP guide',
     rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/workout-logging-instructions.md',
     prologue:
-      'Copy this guide into a Claude conversation to let it log workouts to Supabase for you via MCP.',
+      'Copy this guide into Claude.ai project\'s instructions section to let it log workouts to Supabase for you via MCP.',
   },
   plants: {
     title: 'Plant Care',
     subtitle: 'Claude + Supabase MCP guide',
     rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/plant-care-instructions.md',
     prologue:
-      'Copy this guide into a Claude conversation to let it research plants and update your tracker via MCP.',
+      'Copy this guide into Claude.ai project\'s instructions section to let it research plants and update your tracker via MCP.',
   },
 }
 
