@@ -11,14 +11,14 @@ const GUIDES: Record<string, { title: string; subtitle: string; rawUrl: string; 
     subtitle: 'Claude + Supabase MCP guide',
     rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/workout-logging-instructions.md',
     prologue:
-      'Use this if you want Claude to log workouts into Supabase for you. It is optional: copy this guide into Claude when setting up, then come back here whenever you need a quick refresher.',
+      'Copy this guide into a Claude conversation to let it log workouts to Supabase for you via MCP.',
   },
   plants: {
     title: 'Plant Care',
     subtitle: 'Claude + Supabase MCP guide',
     rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/plant-care-instructions.md',
     prologue:
-      'Use this if you want Claude to help research plants and update your plant tracker with MCP tools. It is optional and mainly useful during setup or when you need to repeat the workflow.',
+      'Copy this guide into a Claude conversation to let it research plants and update your tracker via MCP.',
   },
 }
 
@@ -88,27 +88,7 @@ export function Instructions() {
 
       <div className="max-w-lg mx-auto px-5 py-6">
         {config && (
-          <div className="mb-4 rounded-xl border border-border-default bg-bg-secondary px-4 py-3">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-sm text-text-secondary leading-relaxed m-0">{config.prologue}</p>
-              <button
-                onClick={() => void handleCopyAll()}
-                disabled={!content || loading}
-                className={cn(
-                  'shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors',
-                  'border border-border-default',
-                  copied
-                    ? 'bg-upper-pull/10 text-upper-pull border-upper-pull/30'
-                    : 'bg-bg-primary text-text-secondary hover:border-border-hover',
-                  (!content || loading) && 'opacity-50 cursor-not-allowed hover:border-border-default',
-                )}
-                title="Copy all guide text"
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copied' : 'Copy all'}
-              </button>
-            </div>
-          </div>
+          <p className="text-sm text-text-muted leading-relaxed mb-4">{config.prologue}</p>
         )}
 
         {loading && (
@@ -125,24 +105,44 @@ export function Instructions() {
         )}
 
         {content && (
-          <div className={cn(
-            'prose-custom',
-            '[&_h2]:text-base [&_h2]:font-bold [&_h2]:text-text-primary [&_h2]:mt-6 [&_h2]:mb-2',
-            '[&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-text-primary [&_h3]:mt-5 [&_h3]:mb-1.5',
-            '[&_h4]:text-xs [&_h4]:font-semibold [&_h4]:text-text-secondary [&_h4]:mt-4 [&_h4]:mb-1',
-            '[&_p]:text-text-secondary [&_p]:text-sm [&_p]:leading-relaxed [&_p]:mb-3',
-            '[&_ul]:text-text-secondary [&_ul]:text-sm [&_ul]:mb-3 [&_ul]:pl-5 [&_ul]:list-disc',
-            '[&_ol]:text-text-secondary [&_ol]:text-sm [&_ol]:mb-3 [&_ol]:pl-5 [&_ol]:list-decimal',
-            '[&_li]:mb-1 [&_li]:leading-relaxed',
-            '[&_code]:text-[12px] [&_code]:font-mono [&_code]:bg-bg-elevated [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-upper-pull',
-            '[&_pre]:bg-bg-elevated [&_pre]:rounded-xl [&_pre]:p-4 [&_pre]:mb-3 [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_pre]:leading-relaxed',
-            '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-text-secondary',
-            '[&_strong]:text-text-primary [&_strong]:font-semibold',
-            '[&_a]:text-upper-pull [&_a]:underline',
-            '[&_hr]:border-border-default [&_hr]:my-6',
-            '[&_blockquote]:border-l-2 [&_blockquote]:border-border-default [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-text-muted',
-          )}>
-            <ReactMarkdown>{content}</ReactMarkdown>
+          <div className="rounded-xl border border-border-default bg-bg-secondary">
+            <div className="flex items-center justify-end px-4 pt-3 pb-0">
+              <button
+                onClick={() => void handleCopyAll()}
+                disabled={!content || loading}
+                className={cn(
+                  'inline-flex items-center gap-1.5 min-w-[5.25rem] justify-center px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors',
+                  'border border-border-default',
+                  copied
+                    ? 'bg-upper-pull/10 text-upper-pull border-upper-pull/30'
+                    : 'bg-bg-primary text-text-secondary hover:border-border-hover',
+                )}
+                title="Copy all guide text"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Copied' : 'Copy all'}
+              </button>
+            </div>
+            <div className={cn(
+              'px-4 pb-4 pt-2',
+              'prose-custom',
+              '[&_h2]:text-base [&_h2]:font-bold [&_h2]:text-text-primary [&_h2]:mt-6 [&_h2]:mb-2',
+              '[&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-text-primary [&_h3]:mt-5 [&_h3]:mb-1.5',
+              '[&_h4]:text-xs [&_h4]:font-semibold [&_h4]:text-text-secondary [&_h4]:mt-4 [&_h4]:mb-1',
+              '[&_p]:text-text-secondary [&_p]:text-sm [&_p]:leading-relaxed [&_p]:mb-3',
+              '[&_ul]:text-text-secondary [&_ul]:text-sm [&_ul]:mb-3 [&_ul]:pl-5 [&_ul]:list-disc',
+              '[&_ol]:text-text-secondary [&_ol]:text-sm [&_ol]:mb-3 [&_ol]:pl-5 [&_ol]:list-decimal',
+              '[&_li]:mb-1 [&_li]:leading-relaxed',
+              '[&_code]:text-[12px] [&_code]:font-mono [&_code]:bg-bg-elevated [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-upper-pull',
+              '[&_pre]:bg-bg-elevated [&_pre]:rounded-xl [&_pre]:p-4 [&_pre]:mb-3 [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_pre]:leading-relaxed',
+              '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-text-secondary',
+              '[&_strong]:text-text-primary [&_strong]:font-semibold',
+              '[&_a]:text-upper-pull [&_a]:underline',
+              '[&_hr]:border-border-default [&_hr]:my-6',
+              '[&_blockquote]:border-l-2 [&_blockquote]:border-border-default [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-text-muted',
+            )}>
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
           </div>
         )}
       </div>

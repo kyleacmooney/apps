@@ -1081,13 +1081,6 @@ export function Workouts() {
         sticky={viewMode === "list"}
         rightActions={
           <>
-            <Link
-              to="/instructions/workouts"
-              className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors no-underline"
-              title="Guide"
-            >
-              <FileText className="w-4 h-4" />
-            </Link>
             <button
               onClick={() => {
                 queryClient.invalidateQueries({ queryKey: ['workouts'] })
@@ -1332,6 +1325,17 @@ export function Workouts() {
             }}
           />
         )}
+
+        {/* Subtle guide link */}
+        <div className="flex justify-center pt-8 pb-4">
+          <Link
+            to="/instructions/workouts"
+            className="inline-flex items-center gap-1.5 text-xs text-text-dim hover:text-text-muted transition-colors no-underline"
+          >
+            <FileText className="w-3 h-3" />
+            Claude setup guide
+          </Link>
+        </div>
       </div>
     </div>
   )

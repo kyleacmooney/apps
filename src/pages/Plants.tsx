@@ -1567,13 +1567,6 @@ export function Plants() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Link
-                to="/instructions/plants"
-                className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors"
-                title="Guide"
-              >
-                <Leaf className="w-4 h-4" />
-              </Link>
               <button
                 onClick={handleRefresh}
                 className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors cursor-pointer"
@@ -1826,6 +1819,16 @@ export function Plants() {
             )}
           </div>
         )}
+        {/* Subtle guide link */}
+        <div className="flex justify-center pt-8 pb-4">
+          <Link
+            to="/instructions/plants"
+            className="inline-flex items-center gap-1.5 text-xs text-text-dim hover:text-text-muted transition-colors no-underline"
+          >
+            <Leaf className="w-3 h-3" />
+            Claude setup guide
+          </Link>
+        </div>
       </div>
 
       {/* Undo toast */}
