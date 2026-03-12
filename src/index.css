@@ -98,6 +98,43 @@
   100% { transform: scale(1); }
 }
 
+@keyframes install {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes uninstall {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+}
+
+@utility ease-spring {
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@utility animate-install {
+  animation: install 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@utility animate-uninstall {
+  animation: uninstall 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
 @layer base {
   body {
     @apply bg-bg-primary text-text-primary font-sans antialiased;

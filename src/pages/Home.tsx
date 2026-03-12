@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings } from "@/context/SupabaseContext"
@@ -24,6 +24,7 @@ import {
   X,
   Plus,
   LayoutGrid,
+  GripVertical,
 } from "lucide-react"
 
 export function Home() {
@@ -35,6 +36,12 @@ export function Home() {
   const [homeMessages, setHomeMessages] = useState(getHomeMessages())
   const [managing, setManaging] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [installingSlug, setInstallingSlug] = useState<string | null>(null)
+  const [uninstallingSlug, setUninstallingSlug] = useState<string | null>(null)
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null)
+  const touchStartPos = useRef<{ x: number; y: number; index: number } | null>(null)
 
   useEffect(() => {
     const updateMessages = () => {
@@ -59,8 +66,25 @@ export function Home() {
   const visibleApps = ALL_APPS.filter((a) => activeSlugSet.has(a.slug))
   const hiddenApps = ALL_APPS.filter((a) => !activeSlugSet.has(a.slug))
 
+  // Get ordered list of installed apps for managing mode
+  const getOrderedInstalledApps = useCallback(() => {
+    const current = installedApps ?? ALL_APP_SLUGS
+    return ALL_APPS.filter((a) => current.includes(a.slug))
+  }, [installedApps])
+
   const toggleApp = async (slug: string) => {
-    if (!user) return
+    if (!user || saving) return
+    
+    const isInstalling = !activeSlugSet.has(slug)
+    if (isInstalling) {
+      setInstallingSlug(slug)
+    } else {
+      setUninstallingSlug(slug)
+    }
+
+    // Small delay for animation
+    await new Promise(resolve => setTimeout(resolve, 300))
+
     const current = installedApps ?? ALL_APP_SLUGS
     const next = current.includes(slug)
       ? current.filter((s) => s !== slug)
@@ -72,7 +96,97 @@ export function Home() {
       await saveInstalledApps(ordered)
     } finally {
       setSaving(false)
+      setInstallingSlug(null)
+      setUninstallingSlug(null)
     }
+  }
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    if (!managing) return
+    setDraggedIndex(index)
+    dragStartPos.current = { x: e.clientX, y: e.clientY }
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/html', '')
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index)
+    }
+  }
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+    dragStartPos.current = null
+  }
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (draggedIndex === null || draggedIndex === dropIndex || !user || saving) {
+      setDraggedIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    const orderedApps = getOrderedInstalledApps()
+    const newOrder = [...orderedApps]
+    const [draggedApp] = newOrder.splice(draggedIndex, 1)
+    newOrder.splice(dropIndex, 0, draggedApp)
+
+    const newSlugOrder = newOrder.map(a => a.slug)
+    setSaving(true)
+    try {
+      await saveInstalledApps(newSlugOrder)
+    } finally {
+      setSaving(false)
+    }
+
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+  }
+
+  // Touch handlers for mobile drag
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    if (!managing || saving) return
+    const touch = e.touches[0]
+    touchStartPos.current = { x: touch.clientX, y: touch.clientY, index }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent, index: number) => {
+    if (!touchStartPos.current || touchStartPos.current.index !== index || saving) return
+    
+    const touch = e.touches[0]
+    const deltaX = Math.abs(touch.clientX - touchStartPos.current.x)
+    const deltaY = Math.abs(touch.clientY - touchStartPos.current.y)
+    
+    // Start drag if moved more than 10px
+    if ((deltaX > 10 || deltaY > 10) && draggedIndex === null) {
+      setDraggedIndex(index)
+      e.preventDefault()
+    }
+  }
+
+  const handleTouchEnd = (_e: React.TouchEvent, dropIndex: number) => {
+    if (touchStartPos.current && draggedIndex !== null && draggedIndex !== dropIndex) {
+      // Trigger drop
+      const dropEvent = {
+        preventDefault: () => {},
+        stopPropagation: () => {},
+      } as React.DragEvent
+      handleDrop(dropEvent, dropIndex)
+    }
+    touchStartPos.current = null
+    setDraggedIndex(null)
+    setDragOverIndex(null)
   }
 
   return (
@@ -207,38 +321,102 @@ export function Home() {
           {(managing ? ALL_APPS : visibleApps).map((app) => {
             const Icon = app.icon
             const isInstalled = activeSlugSet.has(app.slug)
+            const isInstalling = installingSlug === app.slug
+            const isUninstalling = uninstallingSlug === app.slug
 
             if (managing) {
+              const orderedInstalled = getOrderedInstalledApps()
+              const installedIndex = orderedInstalled.findIndex(a => a.slug === app.slug)
+              const canDrag = isInstalled && installedIndex !== -1
+              const isDragged = canDrag && draggedIndex === installedIndex
+              const isDragOver = canDrag && dragOverIndex === installedIndex
+
               return (
-                <button
+                <div
                   key={app.slug}
-                  onClick={() => toggleApp(app.slug)}
-                  disabled={saving}
+                  draggable={canDrag && !saving}
+                  onDragStart={(e) => canDrag && !saving && handleDragStart(e, installedIndex)}
+                  onDragOver={(e) => canDrag && !saving && handleDragOver(e, installedIndex)}
+                  onDragLeave={handleDragLeave}
+                  onDragEnd={handleDragEnd}
+                  onDrop={(e) => canDrag && !saving && handleDrop(e, installedIndex)}
+                  onTouchStart={(e) => canDrag && !saving && handleTouchStart(e, installedIndex)}
+                  onTouchMove={(e) => canDrag && !saving && handleTouchMove(e, installedIndex)}
+                  onTouchEnd={(e) => canDrag && !saving && handleTouchEnd(e, installedIndex)}
                   className={cn(
-                    "group relative flex flex-col items-center justify-center p-5 rounded-xl border transition-all duration-200 aspect-square cursor-pointer",
-                    isInstalled
-                      ? "bg-bg-secondary border-border-default opacity-100"
-                      : "bg-bg-primary border-dashed border-border-default opacity-50"
+                    "relative transition-all duration-300 ease-spring",
+                    isDragged && "opacity-60 z-50 shadow-2xl",
+                    isDragOver && "translate-y-2",
+                    (isInstalling || isUninstalling) && "pointer-events-none"
                   )}
+                  style={{
+                    transform: isDragged 
+                      ? 'scale(0.85) rotate(3deg)' 
+                      : isDragOver 
+                        ? 'translateY(8px) scale(1.02)' 
+                        : undefined,
+                  }}
                 >
-                  <Icon className={cn("w-9 h-9 mb-2.5", app.iconColor, !isInstalled && "grayscale")} />
-                  <span className="text-sm font-semibold text-text-primary text-center">
-                    {app.name}
-                  </span>
-                  <span className="text-text-muted text-[11px] text-center mt-0.5">
-                    {app.description}
-                  </span>
-                  <span
+                  <button
+                    onClick={() => !saving && toggleApp(app.slug)}
+                    disabled={saving || isInstalling || isUninstalling}
                     className={cn(
-                      "absolute top-2 right-2 flex items-center justify-center w-5 h-5 rounded-full border text-[10px]",
+                      "group relative flex flex-col items-center justify-center p-5 rounded-xl border aspect-square cursor-pointer w-full",
+                      "transition-all duration-300 ease-spring",
                       isInstalled
-                        ? "bg-bg-elevated border-border-default text-text-muted"
-                        : "bg-bg-secondary border-dashed border-border-default text-text-dim"
+                        ? "bg-bg-secondary border-border-default"
+                        : "bg-bg-primary border-dashed border-border-default",
+                      isInstalling && "animate-install",
+                      isUninstalling && "animate-uninstall",
+                      canDrag && "hover:scale-105 active:scale-95"
                     )}
                   >
-                    {isInstalled ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-                  </span>
-                </button>
+                    {canDrag && (
+                      <div className={cn(
+                        "absolute top-1.5 left-1.5 transition-opacity pointer-events-none",
+                        managing ? "opacity-60" : "opacity-0 group-hover:opacity-100"
+                      )}>
+                        <GripVertical className="w-3.5 h-3.5 text-text-muted" />
+                      </div>
+                    )}
+                    <Icon
+                      className={cn(
+                        "w-9 h-9 mb-2.5 transition-all duration-300",
+                        app.iconColor,
+                        !isInstalled && "grayscale opacity-60",
+                        isInstalling && "animate-pulse scale-110",
+                        isUninstalling && "scale-75 opacity-0"
+                      )}
+                    />
+                    <span className="text-sm font-semibold text-text-primary text-center transition-opacity duration-300">
+                      {app.name}
+                    </span>
+                    <span className="text-text-muted text-[11px] text-center mt-0.5 transition-opacity duration-300">
+                      {app.description}
+                    </span>
+                    <span
+                      className={cn(
+                        "absolute top-2 right-2 flex items-center justify-center w-6 h-6 rounded-full border transition-all duration-300 ease-spring",
+                        isInstalled
+                          ? "bg-bg-elevated border-border-default text-text-muted scale-100"
+                          : "bg-bg-secondary border-dashed border-border-default text-text-dim scale-90",
+                        isInstalling && "scale-110 animate-pulse",
+                        isUninstalling && "scale-75 opacity-0"
+                      )}
+                    >
+                      {isInstalled ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <Plus className="w-3.5 h-3.5" />
+                      )}
+                    </span>
+                    {isInstalling && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-bg-secondary/80 rounded-xl">
+                        <div className="w-8 h-8 border-2 border-text-muted border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </button>
+                </div>
               )
             }
 
@@ -247,11 +425,12 @@ export function Home() {
                 key={app.slug}
                 to={app.path}
                 className={cn(
-                  "group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default transition-all duration-200 no-underline aspect-square",
+                  "group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default transition-all duration-300 ease-spring no-underline aspect-square",
+                  "hover:scale-105 active:scale-95",
                   app.hoverBorderColor
                 )}
               >
-                <Icon className={cn("w-9 h-9 mb-2.5 group-hover:scale-110 transition-transform", app.iconColor)} />
+                <Icon className={cn("w-9 h-9 mb-2.5 group-hover:scale-110 transition-transform duration-300", app.iconColor)} />
                 <h2 className="text-sm font-semibold text-text-primary text-center">
                   {app.name}
                 </h2>
