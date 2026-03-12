@@ -5,18 +5,19 @@ export function RouteRestorer() {
   const location = useLocation()
   const navigate = useNavigate()
   const hasRestored = useRef(false)
+  const prevPathname = useRef<string | null>(null)
+  const restoreIntervalRef = useRef<ReturnType<typeof setInterval>>(undefined)
   const routeKey = getScopedStorageKey('lastRoute')
-  const scrollKey = getScopedStorageKey('lastScroll')
 
-  // Build the full path including search params
   const fullPath = location.pathname + location.search
+  const hashPathname = location.pathname
 
   // On mount, restore the last saved route
   useEffect(() => {
     const savedRoute = localStorage.getItem(routeKey)
     if (!savedRoute || savedRoute === '/' || savedRoute === fullPath) {
       hasRestored.current = true
-      restoreScroll(scrollKey)
+      restoreScroll(scrollKeyForRoute(hashPathname), restoreIntervalRef)
     } else {
       navigate(savedRoute, { replace: true })
     }
@@ -29,9 +30,9 @@ export function RouteRestorer() {
     const savedRoute = localStorage.getItem(routeKey)
     if (savedRoute && fullPath === savedRoute) {
       hasRestored.current = true
-      restoreScroll(scrollKey)
+      restoreScroll(scrollKeyForRoute(hashPathname), restoreIntervalRef)
     }
-  }, [fullPath, routeKey, scrollKey])
+  }, [fullPath, hashPathname, routeKey])
 
   // Persist route on every navigation (including search params)
   useEffect(() => {
@@ -40,10 +41,32 @@ export function RouteRestorer() {
     }
   }, [fullPath, routeKey])
 
-  // Persist scroll position periodically and on visibility change
+  // Scroll to top when hash pathname changes (after initial restoration)
+  useEffect(() => {
+    if (!hasRestored.current) return
+    // First render after restore — record current pathname, don't scroll
+    if (prevPathname.current === null) {
+      prevPathname.current = hashPathname
+      return
+    }
+    if (prevPathname.current === hashPathname) return
+
+    // Cancel any in-progress scroll restoration from a previous route
+    clearInterval(restoreIntervalRef.current)
+
+    // Save scroll position for the route we're leaving
+    localStorage.setItem(scrollKeyForRoute(prevPathname.current), String(window.scrollY))
+    prevPathname.current = hashPathname
+    window.scrollTo(0, 0)
+  }, [hashPathname])
+
+  // Persist scroll position periodically per hash route
+  const pathnameRef = useRef(hashPathname)
+  pathnameRef.current = hashPathname
+
   useEffect(() => {
     const saveScroll = () =>
-      localStorage.setItem(scrollKey, String(window.scrollY))
+      localStorage.setItem(scrollKeyForRoute(pathnameRef.current), String(window.scrollY))
 
     let ticking = false
     const onScroll = () => {
@@ -68,7 +91,7 @@ export function RouteRestorer() {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pagehide', saveScroll)
     }
-  }, [scrollKey])
+  }, [])
 
   return null
 }
@@ -83,11 +106,20 @@ function getScopedStorageKey(key: string) {
   return `${path}:${key}`
 }
 
+/** Per-route scroll key — each hash pathname gets its own saved scroll position. */
+function scrollKeyForRoute(hashPathname: string) {
+  const base = window.location.pathname.replace(/\/$/, '') || '/'
+  return `${base}:scroll:${hashPathname}`
+}
+
 /**
  * Poll until the page is tall enough, scroll instantly (hidden behind opacity:0),
  * then fade the page in so the user sees it already in position.
  */
-function restoreScroll(scrollKey: string) {
+function restoreScroll(
+  scrollKey: string,
+  intervalRef: React.MutableRefObject<ReturnType<typeof setInterval> | undefined>
+) {
   const raw = localStorage.getItem(scrollKey)
   if (!raw) { revealPage(); return }
   const y = parseInt(raw, 10)
@@ -95,10 +127,10 @@ function restoreScroll(scrollKey: string) {
 
   let attempts = 0
   const maxAttempts = 50 // 5 seconds max
-  const interval = setInterval(() => {
+  intervalRef.current = setInterval(() => {
     attempts++
     if (document.documentElement.scrollHeight >= y + window.innerHeight || attempts >= maxAttempts) {
-      clearInterval(interval)
+      clearInterval(intervalRef.current)
       window.scrollTo(0, y)
       // Reveal after a microtask so the browser paints at the new scroll position
       requestAnimationFrame(() => revealPage())
