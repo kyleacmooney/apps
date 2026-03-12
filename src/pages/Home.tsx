@@ -10,31 +10,31 @@ import {
   getUnreadCount,
   markMessageRead,
 } from "@/lib/app-messages"
+import { ALL_APPS, ALL_APP_SLUGS } from "@/lib/apps"
 import { cn } from "@/lib/utils"
 import {
-  Dumbbell,
-  BookOpen,
   LogIn,
   LogOut,
   ArrowRight,
-  Sprout,
   Settings,
   Database,
   Check,
-  Sparkles,
-  ListTodo,
   Bell,
   ChevronRight,
   X,
+  Plus,
+  LayoutGrid,
 } from "lucide-react"
 
 export function Home() {
   const { user, signIn, signOut } = useAuth()
-  const { isExternalBackend, settingsLoading, authMode } = useSupabaseSettings()
+  const { isExternalBackend, settingsLoading, authMode, installedApps, saveInstalledApps } = useSupabaseSettings()
   const navigate = useNavigate()
   const canGoForward = useCanGoForward()
   const [unreadCount, setUnreadCount] = useState(0)
   const [homeMessages, setHomeMessages] = useState(getHomeMessages())
+  const [managing, setManaging] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const updateMessages = () => {
@@ -52,6 +52,27 @@ export function Home() {
   const dismissFromHome = (id: string) => {
     acknowledgeHomeMessage(id)
     markMessageRead(id)
+  }
+
+  // null = never customized → show all apps
+  const activeSlugSet = new Set(installedApps ?? ALL_APP_SLUGS)
+  const visibleApps = ALL_APPS.filter((a) => activeSlugSet.has(a.slug))
+  const hiddenApps = ALL_APPS.filter((a) => !activeSlugSet.has(a.slug))
+
+  const toggleApp = async (slug: string) => {
+    if (!user) return
+    const current = installedApps ?? ALL_APP_SLUGS
+    const next = current.includes(slug)
+      ? current.filter((s) => s !== slug)
+      : [...current, slug]
+    // Preserve original order
+    const ordered = ALL_APP_SLUGS.filter((s) => next.includes(s))
+    setSaving(true)
+    try {
+      await saveInstalledApps(ordered)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -118,12 +139,30 @@ export function Home() {
 
       {/* Center content */}
       <div className="flex-1 flex flex-col items-center justify-center px-5 pb-20">
-        <h1 className="text-3xl font-bold tracking-tight text-text-primary mb-2">
-          Apps
-        </h1>
-        <p className="text-text-muted text-sm mb-6">Personal tools</p>
+        <div className="w-full max-w-md flex items-end justify-between mb-2">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-text-primary">
+              Apps
+            </h1>
+            <p className="text-text-muted text-sm">Personal tools</p>
+          </div>
+          {user && (
+            <button
+              onClick={() => setManaging((v) => !v)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer",
+                managing
+                  ? "bg-bg-elevated border border-border-hover text-text-primary"
+                  : "text-text-dim hover:text-text-muted"
+              )}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              {managing ? "Done" : "Manage"}
+            </button>
+          )}
+        </div>
 
-        {/* Home surfaced messages */} 
+        {/* Home surfaced messages */}
         {homeMessages.length > 0 && (
           <div className="w-full max-w-md mb-4">
             {homeMessages.map((msg) => (
@@ -165,70 +204,63 @@ export function Home() {
 
         {/* App grid — 2 columns */}
         <div className="grid grid-cols-2 gap-3 w-full max-w-md">
-          <Link
-            to="/exercises"
-            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-upper-pull-border transition-all duration-200 no-underline aspect-square"
-          >
-            <BookOpen className="w-9 h-9 text-upper-pull mb-2.5 group-hover:scale-110 transition-transform" />
-            <h2 className="text-sm font-semibold text-text-primary text-center">
-              Exercises
-            </h2>
-            <p className="text-text-muted text-[11px] text-center mt-0.5">
-              Form & progressions
-            </p>
-          </Link>
+          {(managing ? ALL_APPS : visibleApps).map((app) => {
+            const Icon = app.icon
+            const isInstalled = activeSlugSet.has(app.slug)
 
-          <Link
-            to="/workouts"
-            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-cardio-border transition-all duration-200 no-underline aspect-square"
-          >
-            <Dumbbell className="w-9 h-9 text-cardio mb-2.5 group-hover:scale-110 transition-transform" />
-            <h2 className="text-sm font-semibold text-text-primary text-center">
-              Workouts
-            </h2>
-            <p className="text-text-muted text-[11px] text-center mt-0.5">
-              Session history
-            </p>
-          </Link>
+            if (managing) {
+              return (
+                <button
+                  key={app.slug}
+                  onClick={() => toggleApp(app.slug)}
+                  disabled={saving}
+                  className={cn(
+                    "group relative flex flex-col items-center justify-center p-5 rounded-xl border transition-all duration-200 aspect-square cursor-pointer",
+                    isInstalled
+                      ? "bg-bg-secondary border-border-default opacity-100"
+                      : "bg-bg-primary border-dashed border-border-default opacity-50"
+                  )}
+                >
+                  <Icon className={cn("w-9 h-9 mb-2.5", app.iconColor, !isInstalled && "grayscale")} />
+                  <span className="text-sm font-semibold text-text-primary text-center">
+                    {app.name}
+                  </span>
+                  <span className="text-text-muted text-[11px] text-center mt-0.5">
+                    {app.description}
+                  </span>
+                  <span
+                    className={cn(
+                      "absolute top-2 right-2 flex items-center justify-center w-5 h-5 rounded-full border text-[10px]",
+                      isInstalled
+                        ? "bg-bg-elevated border-border-default text-text-muted"
+                        : "bg-bg-secondary border-dashed border-border-default text-text-dim"
+                    )}
+                  >
+                    {isInstalled ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                  </span>
+                </button>
+              )
+            }
 
-          <Link
-            to="/plants"
-            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-plant-border transition-all duration-200 no-underline aspect-square"
-          >
-            <Sprout className="w-9 h-9 text-plant mb-2.5 group-hover:scale-110 transition-transform" />
-            <h2 className="text-sm font-semibold text-text-primary text-center">
-              Plants
-            </h2>
-            <p className="text-text-muted text-[11px] text-center mt-0.5">
-              Care & tracking
-            </p>
-          </Link>
-
-          <Link
-            to="/todos"
-            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-ai-border transition-all duration-200 no-underline aspect-square"
-          >
-            <ListTodo className="w-9 h-9 text-ai mb-2.5 group-hover:scale-110 transition-transform" />
-            <h2 className="text-sm font-semibold text-text-primary text-center">
-              Todos
-            </h2>
-            <p className="text-text-muted text-[11px] text-center mt-0.5">
-              Daily tasks
-            </p>
-          </Link>
-
-          <Link
-            to="/chat"
-            className="group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default hover:border-ai-border transition-all duration-200 no-underline aspect-square"
-          >
-            <Sparkles className="w-9 h-9 text-ai mb-2.5 group-hover:scale-110 transition-transform" />
-            <h2 className="text-sm font-semibold text-text-primary text-center">
-              AI Chat
-            </h2>
-            <p className="text-text-muted text-[11px] text-center mt-0.5">
-              Ask anything
-            </p>
-          </Link>
+            return (
+              <Link
+                key={app.slug}
+                to={app.path}
+                className={cn(
+                  "group flex flex-col items-center justify-center p-5 rounded-xl bg-bg-secondary border border-border-default transition-all duration-200 no-underline aspect-square",
+                  app.hoverBorderColor
+                )}
+              >
+                <Icon className={cn("w-9 h-9 mb-2.5 group-hover:scale-110 transition-transform", app.iconColor)} />
+                <h2 className="text-sm font-semibold text-text-primary text-center">
+                  {app.name}
+                </h2>
+                <p className="text-text-muted text-[11px] text-center mt-0.5">
+                  {app.description}
+                </p>
+              </Link>
+            )
+          })}
         </div>
 
         {/* Utility row — visually distinct from app grid */}
@@ -279,6 +311,19 @@ export function Home() {
               <ChevronRight className="w-4 h-4 text-text-dim shrink-0" />
             </Link>
           </div>
+        )}
+
+        {/* Manage hint when apps have been hidden */}
+        {!managing && hiddenApps.length > 0 && user && (
+          <p className="text-text-dim text-[11px] mt-4 text-center">
+            {hiddenApps.length} app{hiddenApps.length > 1 ? 's' : ''} hidden —{' '}
+            <button
+              onClick={() => setManaging(true)}
+              className="underline cursor-pointer hover:text-text-muted transition-colors"
+            >
+              Manage
+            </button>
+          </p>
         )}
       </div>
     </div>

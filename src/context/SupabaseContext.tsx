@@ -21,6 +21,13 @@ interface SupabaseContextValue {
   saveExternalBackend: (url: string, anonKey: string) => Promise<void>
   /** Remove external Supabase configuration (revert to shared backend) */
   clearExternalBackend: () => Promise<void>
+  /**
+   * Slugs of apps the user has chosen to install, or null if never customized
+   * (null = show all apps, backwards-compatible default).
+   */
+  installedApps: string[] | null
+  /** Persist the user's installed apps list */
+  saveInstalledApps: (apps: string[]) => Promise<void>
 }
 
 const SupabaseContext = createContext<SupabaseContextValue | undefined>(undefined)
@@ -31,6 +38,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [authMode, setAuthMode] = useState<'shared-only' | 'external-authed' | 'external-anon' | 'external-error'>('shared-only')
   const [externalAuthError, setExternalAuthError] = useState<string | null>(null)
+  const [installedApps, setInstalledApps] = useState<string[] | null>(null)
 
   // Fetch user_settings when user changes
   useEffect(() => {
@@ -43,7 +51,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     setSettingsLoading(true)
     supabase
       .from('user_settings')
-      .select('external_supabase_url, external_supabase_anon_key')
+      .select('external_supabase_url, external_supabase_anon_key, installed_apps')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -55,6 +63,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
         } else {
           setExternalConfig(null)
         }
+        setInstalledApps(Array.isArray(data?.installed_apps) ? (data.installed_apps as string[]) : null)
         setSettingsLoading(false)
       })
   }, [user])
@@ -152,6 +161,18 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     setExternalConfig({ url, key: anonKey })
   }, [user])
 
+  const saveInstalledApps = useCallback(async (apps: string[]) => {
+    if (!user) return
+
+    const { error } = await supabase
+      .from('user_settings')
+      .upsert({ user_id: user.id, installed_apps: apps }, { onConflict: 'user_id' })
+
+    if (error) throw error
+
+    setInstalledApps(apps)
+  }, [user])
+
   const clearExternalBackend = useCallback(async () => {
     if (!user) return
 
@@ -178,7 +199,9 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     externalAuthError,
     saveExternalBackend,
     clearExternalBackend,
-  }), [dataClient, externalConfig, settingsLoading, authMode, externalAuthError, saveExternalBackend, clearExternalBackend])
+    installedApps,
+    saveInstalledApps,
+  }), [dataClient, externalConfig, settingsLoading, authMode, externalAuthError, saveExternalBackend, clearExternalBackend, installedApps, saveInstalledApps])
 
   return (
     <SupabaseContext.Provider value={value}>
