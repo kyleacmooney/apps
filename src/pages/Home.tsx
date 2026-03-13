@@ -343,7 +343,9 @@ export function Home() {
           "flex-1 flex flex-col items-center px-5",
           managing
             ? "overflow-y-auto overscroll-none pt-2 pb-6 justify-start"
-            : "justify-center pb-20"
+            : hiddenApps.length > 0
+              ? "justify-start pt-4 pb-20"
+              : "justify-center pb-20"
         )}
       >
         <div className="w-full max-w-md flex items-end justify-between mb-2">
