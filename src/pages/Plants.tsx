@@ -963,7 +963,7 @@ function PlantDetailSheet({
       />
       <div
         className={cn(
-          'relative w-full max-w-lg bg-bg-secondary rounded-t-2xl border-t border-x border-border-default min-h-[50vh] max-h-[80vh] flex flex-col transition-transform duration-300 ease-out',
+          'relative w-full max-w-lg bg-bg-secondary rounded-t-2xl border-t border-x border-border-default h-[80vh] flex flex-col transition-transform duration-300 ease-out',
           visible ? 'translate-y-0' : 'translate-y-full',
         )}
       >
