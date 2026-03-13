@@ -652,49 +652,56 @@ function CalendarView({
       </div>
 
       {/* Calendar grid */}
-      <div className={cn("grid grid-cols-7 gap-1", loading && "opacity-50 pointer-events-none")}>
-        {cells.map((day, i) => {
-          if (day === null) return <div key={i} />
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div className="w-5 h-5 border-2 border-border-default border-t-cardio rounded-full animate-spin" />
+          </div>
+        )}
+        <div className={cn("grid grid-cols-7 gap-1 transition-opacity duration-300", loading && "opacity-40")}>
+          {cells.map((day, i) => {
+            if (day === null) return <div key={i} />
 
-          const dateStr = formatDateStr(year, month, day)
-          const daySessions = sessionsByDate.get(dateStr) ?? []
-          const isSelected = selectedDate === dateStr
-          const isToday = dateStr === todayStr
+            const dateStr = formatDateStr(year, month, day)
+            const daySessions = sessionsByDate.get(dateStr) ?? []
+            const isSelected = selectedDate === dateStr
+            const isToday = dateStr === todayStr
 
-          return (
-            <button
-              key={i}
-              onClick={() => {
-                const newDate = isSelected ? null : dateStr
-                setSelectedDate(newDate)
-                onDateSelect(newDate)
-              }}
-              className={cn(
-                "aspect-square rounded-lg flex flex-col items-center justify-center gap-1 text-sm transition-all",
-                isSelected
-                  ? "bg-bg-elevated border border-border-hover"
-                  : "border border-transparent hover:bg-bg-elevated/50",
-                isToday && "ring-1 ring-core/50",
-                daySessions.length > 0 ? "text-text-primary font-medium" : "text-text-dim"
-              )}
-            >
-              <span className="text-[13px]">{day}</span>
-              {daySessions.length > 0 && (
-                <div className="flex gap-0.5">
-                  {daySessions.map((s, j) => (
-                    <div
-                      key={j}
-                      className={cn(
-                        "w-1.5 h-1.5 rounded-full",
-                        SESSION_DOT_COLORS[s.session_type] ?? "bg-text-muted"
-                      )}
-                    />
-                  ))}
-                </div>
-              )}
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={i}
+                onClick={() => {
+                  const newDate = isSelected ? null : dateStr
+                  setSelectedDate(newDate)
+                  onDateSelect(newDate)
+                }}
+                className={cn(
+                  "aspect-square rounded-lg flex flex-col items-center justify-center gap-1 text-sm transition-all",
+                  isSelected
+                    ? "bg-bg-elevated border border-border-hover"
+                    : "border border-transparent hover:bg-bg-elevated/50",
+                  isToday && "ring-1 ring-core/50",
+                  daySessions.length > 0 ? "text-text-primary font-medium" : "text-text-dim"
+                )}
+              >
+                <span className="text-[13px]">{day}</span>
+                {daySessions.length > 0 && (
+                  <div className="flex gap-0.5">
+                    {daySessions.map((s, j) => (
+                      <div
+                        key={j}
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full animate-fade-in",
+                          SESSION_DOT_COLORS[s.session_type] ?? "bg-text-muted"
+                        )}
+                      />
+                    ))}
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Selected day sessions */}

@@ -153,7 +153,7 @@ function AddTodoForm({
   }
 
   return (
-    <div className="rounded-xl bg-bg-secondary border border-border-default p-4">
+    <div className="rounded-xl bg-bg-secondary border border-border-default p-4 overflow-hidden">
       <input
         ref={titleRef}
         type="text"
@@ -207,7 +207,7 @@ function AddTodoForm({
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
+            className="w-full min-w-0 bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
           />
         </div>
 
@@ -296,7 +296,7 @@ function EditTodoForm({
   }
 
   return (
-    <div className="rounded-xl bg-bg-secondary border border-ai-border p-4">
+    <div className="rounded-xl bg-bg-secondary border border-ai-border p-4 overflow-hidden">
       <input
         ref={titleRef}
         type="text"
@@ -350,7 +350,7 @@ function EditTodoForm({
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
+            className="w-full min-w-0 bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
           />
         </div>
 
