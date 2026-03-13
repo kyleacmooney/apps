@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Mobile-first single-page React app serving personal tools at https://kyleacmooney.github.io/apps/. Uses HashRouter for GitHub Pages compatibility and Supabase for auth + data. All UI decisions should prioritize touch interactions, thumb-reachable layouts, and mobile viewport ergonomics. Intended to be used as a standalone PWA via Safari "Add to Home Screen" on iPhone — `apple-mobile-web-app-capable` and `manifest.json` (display: standalone) are configured in `index.html`. Route persistence across app suspensions is handled by `RouteRestorer` (saves the current path to localStorage).
+Mobile-first single-page React app serving personal tools at https://kyleacmooney.github.io/apps/. Uses HashRouter for GitHub Pages compatibility and Supabase for auth + data. All UI decisions should prioritize touch interactions, thumb-reachable layouts, and mobile viewport ergonomics. Intended to be used as a standalone PWA via Safari "Add to Home Screen" on iPhone — `apple-mobile-web-app-capable` and manifest (display: standalone) are configured. A Workbox-powered service worker (via `vite-plugin-pwa`) precaches all build assets and runtime-caches fonts and API responses so the app loads instantly from cache on subsequent visits. Route persistence across app suspensions is handled by `RouteRestorer` (saves the current path to localStorage).
 
 ## Commands
 
@@ -25,6 +25,7 @@ src/
   context/AuthContext.tsx       # Google OAuth provider, useAuth() hook
   context/SupabaseContext.tsx   # Dynamic Supabase client — useDataClient() for data queries, useSupabaseSettings() for config
   components/ProtectedRoute.tsx # Redirects to login if unauthenticated
+  components/SWUpdatePrompt.tsx # "Update available" toast when new SW is ready
   lib/token-storage.ts         # AI token storage abstraction (local/shared/private Supabase)
   lib/plant-types.ts           # TypeScript interfaces for plant domain
   lib/plant-care-algorithm.ts  # Smart watering interval computation
@@ -51,6 +52,7 @@ supabase/
 
 ## Key Patterns
 
+- **Service worker (vite-plugin-pwa)** — Workbox `generateSW` mode precaches all build assets so the app loads instantly from cache on return visits (critical for iOS PWA "Add to Home Screen"). Runtime caching: Google Fonts (StaleWhileRevalidate + CacheFirst), Supabase REST API (NetworkFirst, 5s timeout), Supabase Storage (CacheFirst, 30-day expiry). `registerType: "prompt"` — a `SWUpdatePrompt` toast appears when a new version is available; the user taps "Reload" to activate it. The SW checks for updates hourly.
 - **HashRouter** — routes are `/#/path`, avoids GitHub Pages 404 issues with client-side routing
 - **Supabase anon key is public** — hardcoded in `lib/supabase.ts`, safe because Row Level Security on tables enforces access control
 - **Auth flow:** `useAuth()` hook provides `user`, `signIn`, `signOut`. Wrap routes in `<ProtectedRoute>` to require login. Auth always uses the shared Supabase (Kyle's).
