@@ -8,8 +8,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>Apps</title>
 
-    <!-- PWA -->
-    <link rel="manifest" href="/apps/manifest.json" />
     <meta name="theme-color" content="#0a0a12" />
 
     <!-- iOS "Add to Home Screen" -->
@@ -21,10 +19,18 @@
   <body>
     <!-- Hide body until scroll position is restored to prevent visible jump -->
     <script>
-      if (localStorage.getItem('lastScroll') > '0' && localStorage.getItem('lastRoute')) {
-        document.body.style.opacity = '0';
-        document.body.style.transition = 'opacity 0.15s ease-in';
-      }
+      (function() {
+        var base = location.pathname.replace(/\/$/, '') || '/';
+        var route = localStorage.getItem(base + ':lastRoute');
+        if (route) {
+          var hashPath = route.split('?')[0];
+          var y = parseInt(localStorage.getItem(base + ':scroll:' + hashPath) || '0', 10);
+          if (y > 0) {
+            document.body.style.opacity = '0';
+            document.body.style.transition = 'opacity 0.15s ease-in';
+          }
+        }
+      })();
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

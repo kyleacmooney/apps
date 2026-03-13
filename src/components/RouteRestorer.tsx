@@ -68,13 +68,13 @@ export function RouteRestorer() {
     const saveScroll = () =>
       localStorage.setItem(scrollKeyForRoute(pathnameRef.current), String(window.scrollY))
 
-    let ticking = false
+    let rafPending = false
     const onScroll = () => {
-      if (ticking) return
-      ticking = true
+      if (rafPending) return
+      rafPending = true
       requestAnimationFrame(() => {
         saveScroll()
-        ticking = false
+        rafPending = false
       })
     }
 

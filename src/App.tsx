@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext'
 import { SupabaseProvider } from './context/SupabaseContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { RouteRestorer } from './components/RouteRestorer'
+import { SWUpdatePrompt } from './components/SWUpdatePrompt'
 import { Home } from './pages/Home'
 
 const Exercises = lazy(() => import('./pages/Exercises').then((m) => ({ default: m.Exercises })))
@@ -29,6 +30,7 @@ export function App() {
     <SupabaseProvider>
       <HashRouter>
         <RouteRestorer />
+        <SWUpdatePrompt />
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Home />} />
