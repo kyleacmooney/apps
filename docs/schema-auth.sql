@@ -117,6 +117,26 @@ CREATE POLICY "species_profiles: owner" ON species_profiles
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
+-- Interests
+ALTER TABLE interests ADD CONSTRAINT interests_user_id_fk
+  FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+DROP POLICY IF EXISTS "interests: permissive" ON interests;
+CREATE POLICY "interests: owner" ON interests
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Watchlist
+ALTER TABLE watchlist ADD CONSTRAINT watchlist_user_id_fk
+  FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+DROP POLICY IF EXISTS "watchlist: permissive" ON watchlist;
+CREATE POLICY "watchlist: owner" ON watchlist
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
 -- User secrets
 CREATE TABLE IF NOT EXISTS user_secrets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

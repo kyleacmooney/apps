@@ -450,3 +450,63 @@ WITH CHECK (bucket_id = 'plant-photos');
 CREATE POLICY "plant-photos: authenticated update"
 ON storage.objects FOR UPDATE TO authenticated
 USING (bucket_id = 'plant-photos');
+
+-- ============================================================
+-- Interests — personal knowledge queue / reading list
+-- ============================================================
+
+CREATE TABLE interests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  url text,
+  notes text,
+  category text NOT NULL DEFAULT 'other' CHECK (category IN ('book', 'paper', 'math', 'ml', 'alignment', 'tool', 'course', 'other')),
+  status text NOT NULL DEFAULT 'not_started' CHECK (status IN ('not_started', 'in_progress', 'done', 'parked')),
+  tags text[] NOT NULL DEFAULT '{}',
+  priority integer NOT NULL DEFAULT 3 CHECK (priority >= 1 AND priority <= 5),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE interests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "interests: permissive" ON interests FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+CREATE INDEX interests_user_id_idx ON interests(user_id);
+CREATE INDEX interests_status_idx ON interests(user_id, status);
+CREATE INDEX interests_category_idx ON interests(user_id, category);
+
+CREATE TRIGGER enforce_interests_limit
+  BEFORE INSERT ON interests
+  FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('2000', 'user_id');
+
+-- ============================================================
+-- Watchlist — movies and shows tracker
+-- ============================================================
+
+CREATE TABLE watchlist (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  media_type text NOT NULL DEFAULT 'movie' CHECK (media_type IN ('movie', 'show')),
+  status text NOT NULL DEFAULT 'want' CHECK (status IN ('want', 'watching', 'watched')),
+  rating integer CHECK (rating >= 1 AND rating <= 10),
+  notes text,
+  tags text[] NOT NULL DEFAULT '{}',
+  year integer,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "watchlist: permissive" ON watchlist FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+CREATE INDEX watchlist_user_id_idx ON watchlist(user_id);
+CREATE INDEX watchlist_status_idx ON watchlist(user_id, status);
+CREATE INDEX watchlist_type_idx ON watchlist(user_id, media_type);
+
+CREATE TRIGGER enforce_watchlist_limit
+  BEFORE INSERT ON watchlist
+  FOR EACH ROW EXECUTE FUNCTION enforce_row_limit('2000', 'user_id');

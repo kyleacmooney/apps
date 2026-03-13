@@ -38,6 +38,8 @@ src/
   pages/Workouts.tsx           # Workout session history
   pages/Plants.tsx             # Plant care tracker (first write-capable feature)
   pages/Todos.tsx              # Daily life task manager — full CRUD with categories, priorities, recurring tasks
+  pages/Interests.tsx          # Personal knowledge queue — books, papers, topics, tools with status/tags/priority
+  pages/Watchlist.tsx          # Movie & show tracker — want/watching/watched with 1-10 star ratings
   pages/Settings.tsx           # Backend configuration — connect your own Supabase project
   pages/Chat.tsx               # In-app AI chat — streams Claude responses via edge function
 docs/
@@ -73,7 +75,7 @@ supabase/
 - Project: `claude-managed` (ID: `svmjtlsdyghxilpcdywc`)
 - Auth: Google OAuth
 - **Multi-user:** All tables have `user_id` columns with RLS policies enforcing `auth.uid() = user_id`. Views use `security_invoker = true` so RLS applies to the calling user. Exercises are per-user (unique constraint on `(user_id, name)`). `workout_exercises` and `workout_sets` inherit user scoping via FK chain to `workout_sessions`.
-- Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles`, `user_settings`, `todos` — all RLS-enabled
+- Tables: `exercises`, `workout_sessions`, `workout_exercises`, `workout_sets`, `rooms`, `plants`, `care_schedules`, `care_logs`, `species_profiles`, `user_settings`, `todos`, `interests`, `watchlist` — all RLS-enabled
 - **`user_settings`:** Stores per-user external Supabase config (`external_supabase_url`, `external_supabase_anon_key`) and optional `claude_oauth_token` (when "Shared Supabase" storage is chosen). Always on the shared Supabase, never on a user's external project. One row per user via unique constraint on `user_id`.
 - **`user_secrets`:** Optional table on the user's external Supabase project for storing `claude_oauth_token` when "Your Supabase" storage is chosen. It is created only in the auth-enabled schema path from `docs/schema-auth.sql`, not in the permissive anon schema.
 - Edge Functions: `chat` (proxies streaming Claude API calls; validates the caller's shared Supabase session and forwards to Anthropic). **Deploy chat with** `supabase functions deploy chat --no-verify-jwt` — auth is verified inside the function; gateway JWT verification can reject valid session tokens.
