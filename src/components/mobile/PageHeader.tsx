@@ -8,7 +8,9 @@ interface PageHeaderProps {
   subtitle?: string
   showBack?: boolean
   showHome?: boolean
+  leftActions?: ReactNode
   rightActions?: ReactNode
+  children?: ReactNode
   className?: string
   sticky?: boolean
 }
@@ -18,7 +20,9 @@ export function PageHeader({
   subtitle,
   showBack = true,
   showHome = true,
+  leftActions,
   rightActions,
+  children,
   className,
   sticky = false,
 }: PageHeaderProps) {
@@ -44,6 +48,7 @@ export function PageHeader({
                 <ArrowLeft className="w-5 h-5" />
               </button>
             )}
+            {leftActions}
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2.5">
                 {typeof title === 'string' ? (
@@ -74,6 +79,7 @@ export function PageHeader({
             )}
           </div>
         </div>
+        {children}
       </div>
     </div>
   )

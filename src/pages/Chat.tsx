@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
-import { Home, Send, Trash2, Square, Sparkles, User, AlertCircle, Settings, Menu, Plus, History, X } from "lucide-react"
+import { Send, Trash2, Square, Sparkles, User, AlertCircle, Settings, Menu, Plus, History, X } from "lucide-react"
+import { PageHeader } from "@/components/mobile/PageHeader"
 import { useAuth } from "@/context/AuthContext"
 import { useSupabaseSettings, useDataClient } from "@/context/SupabaseContext"
 import { usePersistedState } from "@/lib/use-persisted-state"
@@ -544,43 +545,39 @@ export function Chat() {
         </div>
       </div>
 
-      <div className="border-b border-border-default bg-bg-secondary/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <PageHeader
+        title={
+          <>
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-ai" />
+              <h1 className="text-xl font-bold tracking-tight text-text-primary m-0 truncate max-w-[180px] sm:max-w-[320px]">
+                {currentThreadId
+                  ? threads.find((thread) => thread.id === currentThreadId)?.title || "AI Chat"
+                  : "AI Chat"}
+              </h1>
+            </div>
+          </>
+        }
+        sticky
+        rightActions={
+          <>
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="text-text-muted hover:text-text-primary transition-colors p-1 -ml-1"
+              className="shrink-0 w-11 h-11 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors"
               title="History"
             >
               <Menu className="w-5 h-5" />
             </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-ai" />
-            <h1 className="text-lg font-semibold text-text-primary truncate max-w-[150px] sm:max-w-[300px]">
-              {currentThreadId
-                ? threads.find((thread) => thread.id === currentThreadId)?.title || "AI Chat"
-                : "AI Chat"}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
             <button
               onClick={clearChat}
-              className="text-text-muted hover:text-text-primary transition-colors"
+              className="shrink-0 w-11 h-11 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors"
               title="New chat"
             >
               <Plus className="w-5 h-5" />
             </button>
-            <Link
-              to="/"
-              className="text-text-muted hover:text-text-primary transition-colors"
-              title="Home"
-            >
-              <Home className="w-5 h-5" />
-            </Link>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">

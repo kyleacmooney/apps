@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { PageHeader } from '@/components/mobile/PageHeader'
 import { usePersistedState } from '@/lib/use-persisted-state'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useDataClient } from '@/context/SupabaseContext'
@@ -30,7 +31,6 @@ import type {
   SpeciesProfile,
 } from '@/lib/plant-types'
 import {
-  ArrowLeft,
   Plus,
   RefreshCw,
   Check,
@@ -1550,88 +1550,85 @@ export function Plants() {
 
   return (
     <div className="min-h-screen bg-bg-primary select-none">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-10 border-b border-border-default bg-bg-primary/95 backdrop-blur-sm">
-        <div className="max-w-2xl mx-auto px-5 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link
-                to="/"
-                className="text-text-dim hover:text-text-muted transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div className="flex items-center gap-2">
-                <Sprout className="w-5 h-5 text-plant" />
-                <h1 className="text-lg font-semibold text-text-primary">Plants</h1>
-              </div>
-            </div>
+      <PageHeader
+        title={
+          <>
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleRefresh}
-                className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors cursor-pointer"
-              >
-                <RefreshCw
-                  className={cn('w-4 h-4', isRefreshing && 'animate-spin')}
-                />
-              </button>
-              <button
-                onClick={() => setAddPlantOpen(true)}
-                className="w-11 h-11 flex items-center justify-center rounded-lg bg-plant/15 text-plant hover:bg-plant/25 transition-colors cursor-pointer"
-              >
-                <Plus className="w-4.5 h-4.5" />
-              </button>
+              <Sprout className="w-5 h-5 text-plant" />
+              <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">Plants</h1>
             </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 mt-3 bg-bg-elevated rounded-lg p-1">
+          </>
+        }
+        subtitle="Care tracker & schedule"
+        sticky
+        rightActions={
+          <>
             <button
-              onClick={() => setActiveTab('todo')}
-              className={cn(
-                'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
-                activeTab === 'todo'
-                  ? 'bg-bg-secondary text-text-primary shadow-sm'
-                  : 'text-text-dim hover:text-text-muted',
-              )}
+              onClick={handleRefresh}
+              className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors cursor-pointer"
+              title="Refresh"
             >
-              To-Do
-              {todoGrouped.overdue.length + todoGrouped.dueToday.length > 0 && (
-                <span className="ml-1.5 text-xs font-mono bg-plant/20 text-plant px-1.5 py-0.5 rounded-full">
-                  {todoGrouped.overdue.length + todoGrouped.dueToday.length}
-                </span>
-              )}
+              <RefreshCw
+                className={cn('w-4 h-4', isRefreshing && 'animate-spin')}
+              />
             </button>
             <button
-              onClick={() => setActiveTab('my-plants')}
-              className={cn(
-                'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
-                activeTab === 'my-plants'
-                  ? 'bg-bg-secondary text-text-primary shadow-sm'
-                  : 'text-text-dim hover:text-text-muted',
-              )}
+              onClick={() => setAddPlantOpen(true)}
+              className="w-11 h-11 flex items-center justify-center rounded-lg bg-plant/15 text-plant hover:bg-plant/25 transition-colors cursor-pointer"
+              title="Add plant"
             >
-              My Plants
-              {plants.length > 0 && (
-                <span className="ml-1.5 text-xs font-mono text-text-dim">
-                  {plants.length}
-                </span>
-              )}
+              <Plus className="w-4.5 h-4.5" />
             </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={cn(
-                'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
-                activeTab === 'history'
-                  ? 'bg-bg-secondary text-text-primary shadow-sm'
-                  : 'text-text-dim hover:text-text-muted',
-              )}
-            >
-              History
-            </button>
-          </div>
+          </>
+        }
+      >
+        {/* Tabs */}
+        <div className="flex gap-1 mt-3 bg-bg-elevated rounded-lg p-1">
+          <button
+            onClick={() => setActiveTab('todo')}
+            className={cn(
+              'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
+              activeTab === 'todo'
+                ? 'bg-bg-secondary text-text-primary shadow-sm'
+                : 'text-text-dim hover:text-text-muted',
+            )}
+          >
+            To-Do
+            {todoGrouped.overdue.length + todoGrouped.dueToday.length > 0 && (
+              <span className="ml-1.5 text-xs font-mono bg-plant/20 text-plant px-1.5 py-0.5 rounded-full">
+                {todoGrouped.overdue.length + todoGrouped.dueToday.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('my-plants')}
+            className={cn(
+              'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
+              activeTab === 'my-plants'
+                ? 'bg-bg-secondary text-text-primary shadow-sm'
+                : 'text-text-dim hover:text-text-muted',
+            )}
+          >
+            My Plants
+            {plants.length > 0 && (
+              <span className="ml-1.5 text-xs font-mono text-text-dim">
+                {plants.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={cn(
+              'flex-1 text-sm font-medium py-1.5 rounded-md transition-all cursor-pointer',
+              activeTab === 'history'
+                ? 'bg-bg-secondary text-text-primary shadow-sm'
+                : 'text-text-dim hover:text-text-muted',
+            )}
+          >
+            History
+          </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Content */}
       <div className="max-w-2xl mx-auto px-5 py-4 pb-10">
