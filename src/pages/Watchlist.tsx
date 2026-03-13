@@ -1,0 +1,977 @@
+import { useState, useMemo, useCallback, useRef, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import { usePersistedState } from "@/lib/use-persisted-state"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useDataClient } from "@/context/SupabaseContext"
+import { useAuth } from "@/context/AuthContext"
+import { useCanGoForward } from "@/lib/use-can-go-forward"
+import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/mobile/PageHeader"
+import { friendlyError } from "@/lib/error-utils"
+import {
+  ArrowRight,
+  RefreshCw,
+  Plus,
+  Trash2,
+  ChevronDown,
+  X,
+  Film,
+  Tv,
+  Pencil,
+  Star,
+  Tag,
+  Eye,
+  EyeOff,
+  Clapperboard,
+} from "lucide-react"
+
+interface WatchlistItem {
+  id: string
+  user_id: string
+  title: string
+  media_type: MediaType
+  status: WatchStatus
+  rating: number | null
+  notes: string | null
+  tags: string[]
+  year: number | null
+  created_at: string
+  updated_at: string
+}
+
+const MEDIA_TYPES = ["movie", "show"] as const
+type MediaType = (typeof MEDIA_TYPES)[number]
+
+const WATCH_STATUSES = ["want", "watching", "watched"] as const
+type WatchStatus = (typeof WATCH_STATUSES)[number]
+
+const STATUS_LABELS: Record<WatchStatus, string> = {
+  want: "Want to Watch",
+  watching: "Watching",
+  watched: "Watched",
+}
+
+const STATUS_SHORT_LABELS: Record<WatchStatus, string> = {
+  want: "Want",
+  watching: "Watching",
+  watched: "Watched",
+}
+
+const TYPE_ICONS: Record<MediaType, typeof Film> = {
+  movie: Film,
+  show: Tv,
+}
+
+const STATUS_COLORS: Record<WatchStatus, { text: string; bg: string; border: string }> = {
+  want: { text: "text-upper-pull", bg: "bg-upper-pull-bg", border: "border-upper-pull-border" },
+  watching: { text: "text-ai", bg: "bg-ai-bg", border: "border-ai-border" },
+  watched: { text: "text-lower", bg: "bg-lower-bg", border: "border-lower-border" },
+}
+
+const TYPE_COLORS: Record<MediaType, { text: string; bg: string; border: string }> = {
+  movie: { text: "text-upper-push", bg: "bg-upper-push-bg", border: "border-upper-push-border" },
+  show: { text: "text-cardio", bg: "bg-cardio-bg", border: "border-cardio-border" },
+}
+
+type FilterMode = "all" | WatchStatus
+
+function StarRating({
+  value,
+  onChange,
+  size = "sm",
+  readonly = false,
+}: {
+  value: number | null
+  onChange?: (rating: number | null) => void
+  size?: "sm" | "md"
+  readonly?: boolean
+}) {
+  const iconSize = size === "md" ? "w-6 h-6" : "w-4 h-4"
+  const gap = size === "md" ? "gap-1" : "gap-0.5"
+
+  return (
+    <div className={cn("flex items-center", gap)}>
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={readonly}
+          onClick={() => {
+            if (readonly || !onChange) return
+            onChange(value === star ? null : star)
+          }}
+          className={cn(
+            "transition-all",
+            readonly ? "cursor-default" : "cursor-pointer active:scale-125",
+            value !== null && star <= value ? "text-core" : "text-text-dim/40"
+          )}
+        >
+          <Star className={cn(iconSize, value !== null && star <= value && "fill-current")} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function AddWatchlistForm({
+  storagePrefix,
+  onAdd,
+  onCancel,
+}: {
+  storagePrefix: string
+  onAdd: (item: {
+    title: string
+    media_type: MediaType
+    status: WatchStatus
+    rating: number | null
+    notes: string | null
+    tags: string[]
+    year: number | null
+  }) => void
+  onCancel: () => void
+}) {
+  const [title, setTitle] = usePersistedState(`${storagePrefix}:watchlist:add:title`, "")
+  const [mediaType, setMediaType] = usePersistedState<MediaType>(`${storagePrefix}:watchlist:add:type`, "movie")
+  const [status, setStatus] = usePersistedState<WatchStatus>(`${storagePrefix}:watchlist:add:status`, "want")
+  const [rating, setRating] = usePersistedState<number | null>(`${storagePrefix}:watchlist:add:rating`, null)
+  const [notes, setNotes] = usePersistedState(`${storagePrefix}:watchlist:add:notes`, "")
+  const [year, setYear] = usePersistedState(`${storagePrefix}:watchlist:add:year`, "")
+  const [tagInput, setTagInput] = usePersistedState(`${storagePrefix}:watchlist:add:tagInput`, "")
+  const [tags, setTags] = usePersistedState<string[]>(`${storagePrefix}:watchlist:add:tags`, [])
+  const titleRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    titleRef.current?.focus()
+  }, [])
+
+  const resetForm = () => {
+    setTitle("")
+    setMediaType("movie")
+    setStatus("want")
+    setRating(null)
+    setNotes("")
+    setYear("")
+    setTagInput("")
+    setTags([])
+  }
+
+  const addTag = () => {
+    const t = tagInput.trim().toLowerCase()
+    if (t && !tags.includes(t)) setTags([...tags, t])
+    setTagInput("")
+  }
+
+  const removeTag = (tag: string) => setTags(tags.filter((t) => t !== tag))
+
+  const handleSubmit = () => {
+    if (!title.trim()) return
+    onAdd({
+      title: title.trim(),
+      media_type: mediaType,
+      status,
+      rating: status === "watched" ? rating : null,
+      notes: notes.trim() || null,
+      tags,
+      year: year ? Number(year) : null,
+    })
+    resetForm()
+  }
+
+  return (
+    <div className="rounded-xl bg-bg-secondary border border-border-default p-4 overflow-hidden">
+      <input
+        ref={titleRef}
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") handleSubmit() }}
+        placeholder="Movie or show title"
+        className="w-full bg-transparent text-text-primary text-base font-medium placeholder:text-text-dim outline-none mb-3"
+      />
+
+      {/* Type toggle */}
+      <div className="flex gap-2 mb-3">
+        {MEDIA_TYPES.map((type) => {
+          const Icon = TYPE_ICONS[type]
+          const colors = TYPE_COLORS[type]
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setMediaType(type)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-semibold transition-all capitalize",
+                mediaType === type
+                  ? cn(colors.text, colors.bg, colors.border)
+                  : "border-border-default text-text-dim hover:text-text-muted"
+              )}
+            >
+              <Icon className="w-4 h-4" />
+              {type}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-3">
+        <div className="flex-1 min-w-[130px]">
+          <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Status</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as WatchStatus)}
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none appearance-none"
+          >
+            {WATCH_STATUSES.map((s) => (
+              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1 min-w-[100px]">
+          <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Year</label>
+          <input
+            type="number"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            placeholder="e.g. 2024"
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
+          />
+        </div>
+      </div>
+
+      {/* Rating (only when watched) */}
+      {status === "watched" && (
+        <div className="mb-3">
+          <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1.5">Rating</label>
+          <StarRating value={rating} onChange={setRating} size="md" />
+        </div>
+      )}
+
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes (optional)"
+        rows={2}
+        className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base placeholder:text-text-dim outline-none border border-border-default focus:border-border-hover resize-none mb-3"
+      />
+
+      {/* Tags */}
+      <div className="mb-3">
+        <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Tags</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag() } }}
+            placeholder="Genre, mood…"
+            className="flex-1 bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
+          />
+          <button
+            type="button"
+            onClick={addTag}
+            disabled={!tagInput.trim()}
+            className="px-3 py-2 rounded-lg bg-bg-elevated border border-border-default text-text-muted text-sm font-medium disabled:opacity-30 transition-colors"
+          >
+            <Tag className="w-4 h-4" />
+          </button>
+        </div>
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-upper-push-bg text-upper-push border border-upper-push-border cursor-pointer"
+                onClick={() => removeTag(tag)}
+              >
+                {tag}
+                <X className="w-3 h-3" />
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={handleSubmit}
+          disabled={!title.trim()}
+          className="flex-1 py-2.5 rounded-lg bg-upper-push text-bg-primary text-sm font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          Add to Watchlist
+        </button>
+        <button
+          onClick={() => { resetForm(); onCancel() }}
+          className="px-4 py-2.5 rounded-lg border border-border-default text-text-muted text-sm font-semibold hover:bg-bg-elevated transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function EditWatchlistForm({
+  item,
+  onSave,
+  onCancel,
+}: {
+  item: WatchlistItem
+  onSave: (updates: Partial<WatchlistItem>) => void
+  onCancel: () => void
+}) {
+  const [title, setTitle] = useState(item.title)
+  const [mediaType, setMediaType] = useState<MediaType>(item.media_type)
+  const [status, setStatus] = useState<WatchStatus>(item.status)
+  const [rating, setRating] = useState<number | null>(item.rating)
+  const [notes, setNotes] = useState(item.notes ?? "")
+  const [year, setYear] = useState(item.year?.toString() ?? "")
+  const [tagInput, setTagInput] = useState("")
+  const [tags, setTags] = useState<string[]>(item.tags)
+  const titleRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    titleRef.current?.focus()
+  }, [])
+
+  const addTag = () => {
+    const t = tagInput.trim().toLowerCase()
+    if (t && !tags.includes(t)) setTags([...tags, t])
+    setTagInput("")
+  }
+
+  const removeTag = (tag: string) => setTags(tags.filter((t) => t !== tag))
+
+  const handleSubmit = () => {
+    if (!title.trim()) return
+    onSave({
+      title: title.trim(),
+      media_type: mediaType,
+      status,
+      rating: status === "watched" ? rating : null,
+      notes: notes.trim() || null,
+      tags,
+      year: year ? Number(year) : null,
+    })
+  }
+
+  return (
+    <div className="rounded-xl bg-bg-secondary border border-upper-push-border p-4 overflow-hidden">
+      <input
+        ref={titleRef}
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") handleSubmit() }}
+        placeholder="Movie or show title"
+        className="w-full bg-transparent text-text-primary text-base font-medium placeholder:text-text-dim outline-none mb-3"
+      />
+
+      {/* Type toggle */}
+      <div className="flex gap-2 mb-3">
+        {MEDIA_TYPES.map((type) => {
+          const Icon = TYPE_ICONS[type]
+          const colors = TYPE_COLORS[type]
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setMediaType(type)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-semibold transition-all capitalize",
+                mediaType === type
+                  ? cn(colors.text, colors.bg, colors.border)
+                  : "border-border-default text-text-dim hover:text-text-muted"
+              )}
+            >
+              <Icon className="w-4 h-4" />
+              {type}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-3">
+        <div className="flex-1 min-w-[130px]">
+          <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Status</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as WatchStatus)}
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none appearance-none"
+          >
+            {WATCH_STATUSES.map((s) => (
+              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1 min-w-[100px]">
+          <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Year</label>
+          <input
+            type="number"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            placeholder="e.g. 2024"
+            className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
+          />
+        </div>
+      </div>
+
+      {/* Rating (only when watched) */}
+      {status === "watched" && (
+        <div className="mb-3">
+          <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1.5">Rating</label>
+          <StarRating value={rating} onChange={setRating} size="md" />
+        </div>
+      )}
+
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes (optional)"
+        rows={2}
+        className="w-full bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base placeholder:text-text-dim outline-none border border-border-default focus:border-border-hover resize-none mb-3"
+      />
+
+      {/* Tags */}
+      <div className="mb-3">
+        <label className="text-text-dim text-[10px] font-mono uppercase tracking-wider block mb-1">Tags</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag() } }}
+            placeholder="Genre, mood…"
+            className="flex-1 bg-bg-elevated rounded-lg px-3 py-2 text-text-secondary text-base border border-border-default focus:border-border-hover outline-none"
+          />
+          <button
+            type="button"
+            onClick={addTag}
+            disabled={!tagInput.trim()}
+            className="px-3 py-2 rounded-lg bg-bg-elevated border border-border-default text-text-muted text-sm font-medium disabled:opacity-30 transition-colors"
+          >
+            <Tag className="w-4 h-4" />
+          </button>
+        </div>
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-upper-push-bg text-upper-push border border-upper-push-border cursor-pointer"
+                onClick={() => removeTag(tag)}
+              >
+                {tag}
+                <X className="w-3 h-3" />
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={handleSubmit}
+          disabled={!title.trim()}
+          className="flex-1 py-2.5 rounded-lg bg-upper-push text-bg-primary text-sm font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          Save
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2.5 rounded-lg border border-border-default text-text-muted text-sm font-semibold hover:bg-bg-elevated transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function WatchlistCard({
+  storagePrefix,
+  item,
+  onStatusChange,
+  onDelete,
+  onEdit,
+  isEditing,
+  onSaveEdit,
+  onCancelEdit,
+}: {
+  storagePrefix: string
+  item: WatchlistItem
+  onStatusChange: (status: WatchStatus) => void
+  onDelete: () => void
+  onEdit: () => void
+  isEditing: boolean
+  onSaveEdit: (updates: Partial<WatchlistItem>) => void
+  onCancelEdit: () => void
+}) {
+  const [expanded, setExpanded] = usePersistedState(`${storagePrefix}:watchlist:item:${item.id}`, false)
+  const statusColors = STATUS_COLORS[item.status]
+  const typeColors = TYPE_COLORS[item.media_type]
+  const TypeIcon = TYPE_ICONS[item.media_type]
+  const isWatched = item.status === "watched"
+
+  if (isEditing) {
+    return <EditWatchlistForm item={item} onSave={onSaveEdit} onCancel={onCancelEdit} />
+  }
+
+  const nextStatus: WatchStatus =
+    item.status === "want" ? "watching" :
+    item.status === "watching" ? "watched" :
+    "want"
+
+  const StatusIcon = item.status === "watched" ? Eye : item.status === "watching" ? Eye : EyeOff
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl bg-bg-secondary border transition-all",
+        isWatched ? "border-border-default opacity-60" : "border-border-default"
+      )}
+    >
+      <div className="flex items-start gap-3 p-3">
+        {/* Status cycle button */}
+        <button
+          onClick={() => onStatusChange(nextStatus)}
+          className={cn(
+            "mt-0.5 shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all border",
+            statusColors.bg, statusColors.border, statusColors.text
+          )}
+          title={`Mark as ${STATUS_LABELS[nextStatus]}`}
+        >
+          <StatusIcon className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Content */}
+        <div
+          className="flex-1 min-w-0 cursor-pointer"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <h3
+              className={cn(
+                "text-[14px] font-medium m-0 break-words min-w-0",
+                isWatched ? "text-text-dim" : "text-text-primary"
+              )}
+            >
+              {item.title}
+              {item.year && (
+                <span className="text-text-dim font-normal ml-1.5 text-[12px]">({item.year})</span>
+              )}
+            </h3>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span
+                className={cn(
+                  "text-[10px] font-mono font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded flex items-center gap-1",
+                  typeColors.text, typeColors.bg
+                )}
+              >
+                <TypeIcon className="w-3 h-3" />
+                {item.media_type}
+              </span>
+            </div>
+          </div>
+
+          {/* Meta line */}
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className={cn("text-[11px] font-mono px-1.5 py-0.5 rounded", statusColors.text, statusColors.bg)}>
+              {STATUS_SHORT_LABELS[item.status]}
+            </span>
+            {isWatched && item.rating !== null && (
+              <span className="flex items-center gap-0.5 text-[11px] text-core font-mono">
+                <Star className="w-3 h-3 fill-current" />
+                {item.rating}/10
+              </span>
+            )}
+            {item.tags.length > 0 && (
+              <span className="text-[11px] text-text-dim font-mono">
+                {item.tags.slice(0, 2).join(", ")}
+                {item.tags.length > 2 && ` +${item.tags.length - 2}`}
+              </span>
+            )}
+            {(item.notes || item.tags.length > 0 || expanded) && (
+              <ChevronDown className={cn("w-3 h-3 text-text-dim ml-auto transition-transform", expanded && "rotate-180")} />
+            )}
+          </div>
+
+          {/* Expanded details */}
+          {expanded && (
+            <>
+              {isWatched && (
+                <div className="mt-2">
+                  <StarRating value={item.rating} readonly size="sm" />
+                </div>
+              )}
+              {item.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {item.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-upper-push-bg text-upper-push border border-upper-push-border"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {item.notes && (
+                <p className="text-text-secondary text-sm mt-2 mb-0 leading-relaxed whitespace-pre-wrap">
+                  {item.notes}
+                </p>
+              )}
+              <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border-default">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onEdit() }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-text-dim text-xs hover:text-upper-push hover:bg-upper-push-bg transition-colors"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Edit
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete() }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-text-dim text-xs hover:text-upper-push hover:bg-upper-push-bg transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function Watchlist() {
+  const supabase = useDataClient()
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const canGoForward = useCanGoForward()
+  const queryClient = useQueryClient()
+
+  const storagePrefix = user?.id ?? "guest"
+  const [filterMode, setFilterMode] = usePersistedState<FilterMode>(`${storagePrefix}:watchlist:filter`, "all")
+  const [typeFilter, setTypeFilter] = usePersistedState<MediaType | "all">(`${storagePrefix}:watchlist:typeFilter`, "all")
+  const [showAddForm, setShowAddForm] = usePersistedState(`${storagePrefix}:watchlist:showAdd`, false)
+  const [editingId, setEditingId] = usePersistedState<string | null>(`${storagePrefix}:watchlist:editingId`, null)
+
+  const itemsQuery = useQuery({
+    queryKey: ["watchlist"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("watchlist")
+        .select("*")
+        .order("created_at", { ascending: false })
+      if (error) throw error
+      return (data ?? []) as WatchlistItem[]
+    },
+  })
+
+  const items = itemsQuery.data ?? []
+  const loading = itemsQuery.isLoading
+  const error = itemsQuery.error?.message ?? null
+  const refreshing = itemsQuery.isRefetching
+
+  const addMutation = useMutation({
+    mutationFn: async (newItem: {
+      title: string
+      media_type: MediaType
+      status: WatchStatus
+      rating: number | null
+      notes: string | null
+      tags: string[]
+      year: number | null
+    }) => {
+      const { error } = await supabase.from("watchlist").insert({
+        ...newItem,
+        user_id: user!.id,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["watchlist"] })
+      setShowAddForm(false)
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<WatchlistItem> }) => {
+      const { error } = await supabase
+        .from("watchlist")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["watchlist"] })
+      setEditingId(null)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("watchlist").delete().eq("id", id)
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["watchlist"] }),
+  })
+
+  const filteredItems = useMemo(() => {
+    let result = items
+
+    if (filterMode !== "all") {
+      result = result.filter((i) => i.status === filterMode)
+    }
+    if (typeFilter !== "all") {
+      result = result.filter((i) => i.media_type === typeFilter)
+    }
+
+    return [...result].sort((a, b) => {
+      if (a.status === "watched" && b.status !== "watched") return 1
+      if (a.status !== "watched" && b.status === "watched") return -1
+
+      const statusOrder: Record<WatchStatus, number> = { watching: 0, want: 1, watched: 2 }
+      const sDiff = statusOrder[a.status] - statusOrder[b.status]
+      if (sDiff !== 0) return sDiff
+
+      if (a.status === "watched" && b.status === "watched") {
+        const aRating = a.rating ?? 0
+        const bRating = b.rating ?? 0
+        if (aRating !== bRating) return bRating - aRating
+      }
+
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }, [items, filterMode, typeFilter])
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: items.length, want: 0, watching: 0, watched: 0 }
+    for (const i of items) {
+      counts[i.status] = (counts[i.status] ?? 0) + 1
+    }
+    return counts
+  }, [items])
+
+  const handleStatusChange = useCallback((id: string, status: WatchStatus) => {
+    updateMutation.mutate({ id, updates: { status } })
+  }, [updateMutation])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-3 border-border-default border-t-upper-push rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-text-muted text-sm">Loading watchlist...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center p-5">
+        <div className="bg-upper-push-bg border border-upper-push-border rounded-xl p-6 max-w-sm text-center">
+          <p className="text-upper-push font-semibold mb-2">Failed to load watchlist</p>
+          <p className="text-text-muted text-sm">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-bg-primary overflow-x-hidden">
+      <PageHeader
+        title={
+          <>
+            <h1 className="text-xl font-bold tracking-tight text-text-primary m-0">
+              Watchlist
+            </h1>
+            <span className="text-text-dim text-xs font-mono font-medium">
+              {filterMode === "all" && typeFilter === "all"
+                ? items.filter((i) => i.status !== "watched").length
+                : filteredItems.filter((i) => i.status !== "watched").length}{" "}
+              queued
+            </span>
+          </>
+        }
+        subtitle="Movies & shows to watch"
+        sticky
+        rightActions={
+          <>
+            <button
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["watchlist"] })}
+              className="w-11 h-11 flex items-center justify-center rounded-lg text-text-dim hover:text-text-muted hover:bg-bg-secondary transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+            </button>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className={cn(
+                "w-11 h-11 flex items-center justify-center rounded-lg transition-colors",
+                showAddForm
+                  ? "text-upper-push bg-upper-push-bg"
+                  : "text-text-dim hover:text-upper-push hover:bg-bg-secondary"
+              )}
+              title={showAddForm ? "Close form" : "Add to watchlist"}
+            >
+              {showAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            </button>
+            {canGoForward && (
+              <button
+                onClick={() => navigate(1)}
+                className="w-11 h-11 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-secondary transition-colors"
+                title="Forward"
+              >
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            )}
+          </>
+        }
+      />
+
+      <div className="max-w-2xl mx-auto px-5 pb-4 border-b border-border-default overflow-hidden">
+        {/* Status filter pills */}
+        <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
+          {(["all", "want", "watching", "watched"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setFilterMode(mode)}
+              className={cn(
+                "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap transition-all",
+                filterMode === mode
+                  ? mode === "all"
+                    ? "border-upper-push-border bg-upper-push-bg text-upper-push"
+                    : cn(STATUS_COLORS[mode as WatchStatus].border, STATUS_COLORS[mode as WatchStatus].bg, STATUS_COLORS[mode as WatchStatus].text)
+                  : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+              )}
+            >
+              {mode === "all" ? "All" : STATUS_SHORT_LABELS[mode as WatchStatus]}
+              <span className="ml-1 opacity-60 font-mono text-[11px]">
+                {statusCounts[mode] ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Type filter pills */}
+        <div className="flex gap-1.5 overflow-x-auto mt-2 -mx-5 px-5 scrollbar-none">
+          <button
+            onClick={() => setTypeFilter("all")}
+            className={cn(
+              "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-all",
+              typeFilter === "all"
+                ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
+                : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+            )}
+          >
+            All
+          </button>
+          {MEDIA_TYPES.map((type) => {
+            const colors = TYPE_COLORS[type]
+            const Icon = TYPE_ICONS[type]
+            const count = items.filter((i) => i.media_type === type).length
+            if (count === 0 && typeFilter !== type) return null
+            return (
+              <button
+                key={type}
+                onClick={() => setTypeFilter(type)}
+                className={cn(
+                  "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap capitalize transition-all flex items-center gap-1",
+                  typeFilter === type
+                    ? cn(colors.text, colors.bg, colors.border)
+                    : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
+                )}
+              >
+                <Icon className="w-3 h-3" />
+                {type === "movie" ? "Movies" : "Shows"}
+                <span className="opacity-60 font-mono">{count}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-2xl mx-auto px-5 py-4 pb-10">
+        {showAddForm && (
+          <div className="mb-4">
+            <AddWatchlistForm
+              storagePrefix={storagePrefix}
+              onAdd={(item) => addMutation.mutate(item)}
+              onCancel={() => setShowAddForm(false)}
+            />
+            {addMutation.error && (
+              <p className="text-upper-push text-xs mt-2">
+                {friendlyError(addMutation.error)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {items.length === 0 && !showAddForm && (
+          <div className="flex flex-col items-center justify-center py-20">
+            <Clapperboard className="w-12 h-12 text-text-dim mb-4" />
+            <h2 className="text-lg font-semibold text-text-primary mb-2">
+              Nothing on your list
+            </h2>
+            <p className="text-text-muted text-sm text-center max-w-xs mb-6">
+              Keep track of movies and shows you want to watch, are watching, or have watched.
+            </p>
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="px-5 py-2.5 rounded-lg bg-upper-push text-bg-primary text-sm font-semibold transition-colors"
+            >
+              Add your first title
+            </button>
+          </div>
+        )}
+
+        {/* Filtered empty state */}
+        {items.length > 0 && filteredItems.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-text-dim text-sm">No items match this filter.</p>
+            <button
+              onClick={() => { setFilterMode("all"); setTypeFilter("all") }}
+              className="text-upper-push text-sm mt-2 hover:underline"
+            >
+              Show all items
+            </button>
+          </div>
+        )}
+
+        {/* Item list */}
+        <div className="flex flex-col gap-2">
+          {filteredItems.map((item) => (
+            <WatchlistCard
+              key={item.id}
+              storagePrefix={storagePrefix}
+              item={item}
+              onStatusChange={(status) => handleStatusChange(item.id, status)}
+              onDelete={() => deleteMutation.mutate(item.id)}
+              onEdit={() => setEditingId(item.id)}
+              isEditing={editingId === item.id}
+              onSaveEdit={(updates) => updateMutation.mutate({ id: item.id, updates })}
+              onCancelEdit={() => setEditingId(null)}
+            />
+          ))}
+        </div>
+
+        {/* Watched count footer */}
+        {statusCounts.watched > 0 && filterMode !== "watched" && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => setFilterMode(filterMode === "all" ? "watched" : "all")}
+              className="text-text-dim text-xs font-mono hover:text-text-muted transition-colors"
+            >
+              {statusCounts.watched} watched {statusCounts.watched === 1 ? "title" : "titles"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

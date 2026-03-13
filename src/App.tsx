@@ -18,6 +18,8 @@ const Chat = lazy(() => import('./pages/Chat').then((m) => ({ default: m.Chat })
 const Todos = lazy(() => import('./pages/Todos').then((m) => ({ default: m.Todos })))
 const Messages = lazy(() => import('./pages/Messages').then((m) => ({ default: m.Messages })))
 const Instructions = lazy(() => import('./pages/Instructions').then((m) => ({ default: m.Instructions })))
+const Interests = lazy(() => import('./pages/Interests').then((m) => ({ default: m.Interests })))
+const Watchlist = lazy(() => import('./pages/Watchlist').then((m) => ({ default: m.Watchlist })))
 
 function PageLoader() {
   return <div className="min-h-screen bg-bg-primary" />
@@ -95,6 +97,22 @@ export function App() {
               element={
                 <ProtectedRoute>
                   <Messages />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/interests"
+              element={
+                <ProtectedRoute>
+                  <Interests />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/watchlist"
+              element={
+                <ProtectedRoute>
+                  <Watchlist />
                 </ProtectedRoute>
               }
             />

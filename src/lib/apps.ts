@@ -1,4 +1,4 @@
-import { BookOpen, Dumbbell, Sprout, ListTodo, Sparkles, type LucideIcon } from 'lucide-react'
+import { BookOpen, Dumbbell, Sprout, ListTodo, Sparkles, Compass, Film, type LucideIcon } from 'lucide-react'
 
 export interface AppDefinition {
   slug: string
@@ -48,6 +48,24 @@ export const ALL_APPS: AppDefinition[] = [
     icon: ListTodo,
     iconColor: 'text-ai',
     hoverBorderColor: 'hover:border-ai-border',
+  },
+  {
+    slug: 'interests',
+    name: 'Interests',
+    description: 'Explore & learn',
+    path: '/interests',
+    icon: Compass,
+    iconColor: 'text-core',
+    hoverBorderColor: 'hover:border-core-border',
+  },
+  {
+    slug: 'watchlist',
+    name: 'Watchlist',
+    description: 'Movies & shows',
+    path: '/watchlist',
+    icon: Film,
+    iconColor: 'text-upper-push',
+    hoverBorderColor: 'hover:border-upper-push-border',
   },
   {
     slug: 'chat',
