@@ -9,6 +9,7 @@ import { ArrowRight, Search, ChevronDown, ChevronRight, Target, AlertTriangle, B
 import { cn } from "@/lib/utils"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { PageHeader } from "@/components/mobile/PageHeader"
+import { FilterButton, FilterRow } from "@/components/FilterButton"
 
 /** Render simple inline markdown (**bold**, *italic*) as React elements */
 function renderMarkdown(text: string): React.ReactNode[] {
@@ -381,155 +382,6 @@ function ExerciseCard({
   )
 }
 
-const LONG_PRESS_MS = 500
-
-function CategoryFilterButton({
-  cat,
-  isActive,
-  isExcluded,
-  count,
-  style,
-  canLongPress,
-  onSelect,
-  onLongPress,
-}: {
-  cat: string
-  isActive: boolean
-  isExcluded: boolean
-  count: number
-  style: ReturnType<typeof getCategoryStyle> | null
-  canLongPress: boolean
-  onSelect: () => void
-  onLongPress: () => void
-}) {
-  const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const didLongPress = useRef(false)
-  const [pressing, setPressing] = useState(false)
-  const [justToggled, setJustToggled] = useState(false)
-
-  function handlePointerDown() {
-    didLongPress.current = false
-    if (canLongPress && cat !== "All" && !isExcluded) {
-      setPressing(true)
-    }
-    longPressTimer.current = setTimeout(() => {
-      didLongPress.current = true
-      setPressing(false)
-      setJustToggled(true)
-      setTimeout(() => setJustToggled(false), 400)
-      onLongPress()
-    }, LONG_PRESS_MS)
-  }
-
-  function handlePointerUp() {
-    clearTimeout(longPressTimer.current)
-    setPressing(false)
-  }
-
-  return (
-    <button
-      onClick={() => {
-        if (didLongPress.current) return
-        onSelect()
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      onContextMenu={(e) => e.preventDefault()}
-      className={cn(
-        "relative shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap select-none touch-manipulation overflow-hidden",
-        "transition-all duration-200",
-        justToggled && "animate-[filter-pop_0.4s_ease-out]",
-        isExcluded
-          ? "border-upper-push-border/40 bg-upper-push-bg/30 text-text-dim line-through"
-          : isActive && style
-            ? `${style.border} ${style.bg} ${style.text}`
-            : isActive
-              ? "border-text-muted/40 bg-text-muted/10 text-text-secondary"
-              : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-      )}
-    >
-      {/* Long-press progress fill */}
-      {pressing && (
-        <span
-          className="absolute inset-0 rounded-lg opacity-20 animate-[filter-fill_0.5s_linear_forwards] origin-left"
-          style={{
-            background: isExcluded
-              ? "var(--color-lower)"
-              : "var(--color-upper-push)",
-          }}
-        />
-      )}
-      <span className="relative flex items-center gap-0.5">
-        {isExcluded && <X className="w-3 h-3 inline -ml-0.5" />}
-        {cat}
-        <span className="ml-1 opacity-60 font-mono text-[11px]">
-          {count}
-        </span>
-      </span>
-    </button>
-  )
-}
-
-function CategoryFilterRow({
-  categories,
-  activeCategory,
-  excludedCategories,
-  exercises,
-  categoryCounts,
-  onSelect,
-  onLongPress,
-}: {
-  categories: readonly string[]
-  activeCategory: string
-  excludedCategories: Set<string>
-  exercises: Exercise[]
-  categoryCounts: Record<string, number>
-  onSelect: (cat: string) => void
-  onLongPress: (cat: string) => void
-}) {
-  const canLongPress = activeCategory === "All"
-
-  return (
-    <div>
-      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-5 px-5 scrollbar-none">
-        {categories.map((cat) => {
-          const isActive = activeCategory === cat
-          const isExcluded = cat !== "All" && excludedCategories.has(cat)
-          const count =
-            cat === "All"
-              ? exercises.length - exercises.filter((ex) => excludedCategories.has(ex.category)).length
-              : categoryCounts[cat] || 0
-          const style = cat !== "All" ? getCategoryStyle(cat) : null
-
-          return (
-            <CategoryFilterButton
-              key={cat}
-              cat={cat}
-              isActive={isActive}
-              isExcluded={isExcluded}
-              count={count}
-              style={style}
-              canLongPress={canLongPress}
-              onSelect={() => onSelect(cat)}
-              onLongPress={() => onLongPress(cat)}
-            />
-          )
-        })}
-      </div>
-      {canLongPress && excludedCategories.size === 0 && (
-        <p className="text-text-dim text-[10px] font-mono mt-1.5 ml-0.5 opacity-60">
-          Hold a category to exclude it
-        </p>
-      )}
-      {canLongPress && excludedCategories.size > 0 && (
-        <p className="text-upper-push/60 text-[10px] font-mono mt-1.5 ml-0.5">
-          {excludedCategories.size} excluded — tap to restore
-        </p>
-      )}
-    </div>
-  )
-}
 
 export function Exercises() {
   const supabase = useDataClient()
@@ -845,36 +697,51 @@ export function Exercises() {
         </div>
 
         {/* Category filters — tap to select, long-press to exclude */}
-        <CategoryFilterRow
-            categories={CATEGORIES}
-            activeCategory={activeCategory}
-            excludedCategories={excludedCategories}
-            exercises={exercises}
-            categoryCounts={categoryCounts}
-            onSelect={(cat) => {
-              if (cat === "All") {
-                updateParams({ cat: "All", exclude: null })
-              } else if (excludedCategories.has(cat)) {
-                // Tap an excluded category to un-exclude it
-                const next = new Set(excludedCategories)
-                next.delete(cat)
-                const excludeStr = [...next].join(",") || null
-                updateParams({ exclude: excludeStr })
-              } else {
-                updateParams({ cat, exclude: null })
-              }
-            }}
-            onLongPress={(cat) => {
-              if (cat === "All") return
-              // Long-press only works from "All" view — exclusion subtracts from the full list
-              if (activeCategory !== "All") return
-              const next = new Set(excludedCategories)
-              if (next.has(cat)) next.delete(cat)
-              else next.add(cat)
-              const excludeStr = [...next].join(",") || null
-              updateParams({ exclude: excludeStr })
-            }}
-        />
+        <FilterRow
+          canExclude={activeCategory === "All"}
+          excludedCount={excludedCategories.size}
+          hint="Hold a category to exclude it"
+        >
+          {CATEGORIES.map((cat) => {
+            const isActive = activeCategory === cat
+            const isExcluded = cat !== "All" && excludedCategories.has(cat)
+            const count = cat === "All"
+              ? exercises.length - exercises.filter((ex) => excludedCategories.has(ex.category)).length
+              : categoryCounts[cat] || 0
+            const style = cat !== "All" ? getCategoryStyle(cat) : null
+            return (
+              <FilterButton
+                key={cat}
+                label={cat}
+                count={count}
+                isActive={isActive}
+                isExcluded={isExcluded}
+                style={style}
+                canExclude={activeCategory === "All" && cat !== "All"}
+                onSelect={() => {
+                  if (cat === "All") {
+                    updateParams({ cat: "All", exclude: null })
+                  } else if (excludedCategories.has(cat)) {
+                    const next = new Set(excludedCategories)
+                    next.delete(cat)
+                    const excludeStr = [...next].join(",") || null
+                    updateParams({ exclude: excludeStr })
+                  } else {
+                    updateParams({ cat, exclude: null })
+                  }
+                }}
+                onExclude={() => {
+                  if (activeCategory !== "All") return
+                  const next = new Set(excludedCategories)
+                  if (next.has(cat)) next.delete(cat)
+                  else next.add(cat)
+                  const excludeStr = [...next].join(",") || null
+                  updateParams({ exclude: excludeStr })
+                }}
+              />
+            )
+          })}
+        </FilterRow>
 
         {/* Sort options */}
         <div className="flex items-center gap-2 mt-2.5 select-none">

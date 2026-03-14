@@ -8,6 +8,7 @@ import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/mobile/PageHeader"
 import { friendlyError } from "@/lib/error-utils"
+import { FilterButton, FilterRow } from "@/components/FilterButton"
 import {
   ArrowRight,
   RefreshCw,
@@ -654,6 +655,7 @@ export function Watchlist() {
   const storagePrefix = user?.id ?? "guest"
   const [filterMode, setFilterMode] = usePersistedState<FilterMode>(`${storagePrefix}:watchlist:filter`, "all")
   const [typeFilter, setTypeFilter] = usePersistedState<MediaType | "all">(`${storagePrefix}:watchlist:typeFilter`, "all")
+  const [excludedTypes, setExcludedTypes] = usePersistedState<Set<string>>(`${storagePrefix}:watchlist:excludedTypes`, new Set())
   const [showAddForm, setShowAddForm] = usePersistedState(`${storagePrefix}:watchlist:showAdd`, false)
   const [editingId, setEditingId] = usePersistedState<string | null>(`${storagePrefix}:watchlist:editingId`, null)
 
@@ -726,6 +728,8 @@ export function Watchlist() {
     }
     if (typeFilter !== "all") {
       result = result.filter((i) => i.media_type === typeFilter)
+    } else if (excludedTypes.size > 0) {
+      result = result.filter((i) => !excludedTypes.has(i.media_type))
     }
 
     return [...result].sort((a, b) => {
@@ -744,7 +748,7 @@ export function Watchlist() {
 
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
-  }, [items, filterMode, typeFilter])
+  }, [items, filterMode, typeFilter, excludedTypes])
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: items.length, want: 0, watching: 0, watched: 0 }
@@ -834,64 +838,79 @@ export function Watchlist() {
 
       <div className="max-w-2xl mx-auto px-5 pb-4 border-b border-border-default overflow-hidden">
         {/* Status filter pills */}
-        <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
+        <FilterRow className="mt-3">
           {(["all", "want", "watching", "watched"] as const).map((mode) => (
-            <button
+            <FilterButton
               key={mode}
-              onClick={() => setFilterMode(mode)}
-              className={cn(
-                "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap transition-all",
-                filterMode === mode
-                  ? mode === "all"
-                    ? "border-upper-push-border bg-upper-push-bg text-upper-push"
-                    : cn(STATUS_COLORS[mode as WatchStatus].border, STATUS_COLORS[mode as WatchStatus].bg, STATUS_COLORS[mode as WatchStatus].text)
-                  : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-              )}
-            >
-              {mode === "all" ? "All" : STATUS_SHORT_LABELS[mode as WatchStatus]}
-              <span className="ml-1 opacity-60 font-mono text-[11px]">
-                {statusCounts[mode] ?? 0}
-              </span>
-            </button>
+              label={mode === "all" ? "All" : STATUS_SHORT_LABELS[mode as WatchStatus]}
+              count={statusCounts[mode] ?? 0}
+              isActive={filterMode === mode}
+              style={mode === "all"
+                ? { text: "text-upper-push", bg: "bg-upper-push-bg", border: "border-upper-push-border" }
+                : STATUS_COLORS[mode as WatchStatus]}
+              onSelect={() => setFilterMode(mode)}
+            />
           ))}
-        </div>
+        </FilterRow>
 
         {/* Type filter pills */}
-        <div className="flex gap-1.5 overflow-x-auto mt-2 -mx-5 px-5 scrollbar-none">
-          <button
-            onClick={() => setTypeFilter("all")}
-            className={cn(
-              "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-all",
-              typeFilter === "all"
-                ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
-                : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-            )}
-          >
-            All
-          </button>
+        <FilterRow
+          className="mt-2"
+          canExclude={typeFilter === "all"}
+          excludedCount={excludedTypes.size}
+          hint="Hold a type to exclude it"
+        >
+          <FilterButton
+            label="All"
+            count={items.length - items.filter((i) => excludedTypes.has(i.media_type)).length}
+            isActive={typeFilter === "all"}
+            size="sm"
+            onSelect={() => {
+              setTypeFilter("all")
+              setExcludedTypes(new Set())
+            }}
+          />
           {MEDIA_TYPES.map((type) => {
             const colors = TYPE_COLORS[type]
             const Icon = TYPE_ICONS[type]
             const count = items.filter((i) => i.media_type === type).length
-            if (count === 0 && typeFilter !== type) return null
+            const isExcluded = excludedTypes.has(type)
+            if (count === 0 && typeFilter !== type && !isExcluded) return null
             return (
-              <button
+              <FilterButton
                 key={type}
-                onClick={() => setTypeFilter(type)}
-                className={cn(
-                  "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap capitalize transition-all flex items-center gap-1",
-                  typeFilter === type
-                    ? cn(colors.text, colors.bg, colors.border)
-                    : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-                )}
-              >
-                <Icon className="w-3 h-3" />
-                {type === "movie" ? "Movies" : "Shows"}
-                <span className="opacity-60 font-mono">{count}</span>
-              </button>
+                label={type === "movie" ? "Movies" : "Shows"}
+                count={count}
+                isActive={typeFilter === type}
+                isExcluded={isExcluded}
+                style={colors}
+                icon={Icon}
+                size="sm"
+                canExclude={typeFilter === "all" && !isExcluded}
+                onSelect={() => {
+                  if (isExcluded) {
+                    setExcludedTypes((prev) => {
+                      const next = new Set(prev)
+                      next.delete(type)
+                      return next
+                    })
+                  } else {
+                    setTypeFilter(type)
+                    setExcludedTypes(new Set())
+                  }
+                }}
+                onExclude={() => {
+                  setExcludedTypes((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(type)) next.delete(type)
+                    else next.add(type)
+                    return next
+                  })
+                }}
+              />
             )
           })}
-        </div>
+        </FilterRow>
       </div>
 
       {/* Content */}

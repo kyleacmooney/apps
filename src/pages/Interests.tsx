@@ -8,6 +8,7 @@ import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/mobile/PageHeader"
 import { friendlyError } from "@/lib/error-utils"
+import { FilterButton, FilterRow } from "@/components/FilterButton"
 import {
   ArrowRight,
   RefreshCw,
@@ -615,6 +616,7 @@ export function Interests() {
   const storagePrefix = user?.id ?? "guest"
   const [filterMode, setFilterMode] = usePersistedState<FilterMode>(`${storagePrefix}:interests:filter`, "all")
   const [categoryFilter, setCategoryFilter] = usePersistedState<InterestCategory | "all">(`${storagePrefix}:interests:catFilter`, "all")
+  const [excludedCategories, setExcludedCategories] = usePersistedState<Set<string>>(`${storagePrefix}:interests:excludedCats`, new Set())
   const [showAddForm, setShowAddForm] = usePersistedState(`${storagePrefix}:interests:showAdd`, false)
   const [editingId, setEditingId] = usePersistedState<string | null>(`${storagePrefix}:interests:editingId`, null)
 
@@ -687,6 +689,8 @@ export function Interests() {
     }
     if (categoryFilter !== "all") {
       result = result.filter((i) => i.category === categoryFilter)
+    } else if (excludedCategories.size > 0) {
+      result = result.filter((i) => !excludedCategories.has(i.category))
     }
 
     return [...result].sort((a, b) => {
@@ -700,7 +704,7 @@ export function Interests() {
 
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
-  }, [items, filterMode, categoryFilter])
+  }, [items, filterMode, categoryFilter, excludedCategories])
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: items.length, not_started: 0, in_progress: 0, done: 0, parked: 0 }
@@ -790,62 +794,77 @@ export function Interests() {
 
       <div className="max-w-2xl mx-auto px-5 pb-4 border-b border-border-default overflow-hidden">
         {/* Status filter pills */}
-        <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
+        <FilterRow className="mt-3">
           {(["all", "not_started", "in_progress", "done", "parked"] as const).map((mode) => (
-            <button
+            <FilterButton
               key={mode}
-              onClick={() => setFilterMode(mode)}
-              className={cn(
-                "shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap transition-all",
-                filterMode === mode
-                  ? mode === "all"
-                    ? "border-core-border bg-core-bg text-core"
-                    : cn(STATUS_COLORS[mode as InterestStatus].border, STATUS_COLORS[mode as InterestStatus].bg, STATUS_COLORS[mode as InterestStatus].text)
-                  : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-              )}
-            >
-              {mode === "all" ? "All" : STATUS_LABELS[mode as InterestStatus]}
-              <span className="ml-1 opacity-60 font-mono text-[11px]">
-                {statusCounts[mode] ?? 0}
-              </span>
-            </button>
+              label={mode === "all" ? "All" : STATUS_LABELS[mode as InterestStatus]}
+              count={statusCounts[mode] ?? 0}
+              isActive={filterMode === mode}
+              style={mode === "all"
+                ? { text: "text-core", bg: "bg-core-bg", border: "border-core-border" }
+                : STATUS_COLORS[mode as InterestStatus]}
+              onSelect={() => setFilterMode(mode)}
+            />
           ))}
-        </div>
+        </FilterRow>
 
         {/* Category filter pills */}
-        <div className="flex gap-1.5 overflow-x-auto mt-2 -mx-5 px-5 scrollbar-none">
-          <button
-            onClick={() => setCategoryFilter("all")}
-            className={cn(
-              "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-all",
-              categoryFilter === "all"
-                ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
-                : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-            )}
-          >
-            All
-          </button>
+        <FilterRow
+          className="mt-2"
+          canExclude={categoryFilter === "all"}
+          excludedCount={excludedCategories.size}
+          hint="Hold a category to exclude it"
+        >
+          <FilterButton
+            label="All"
+            count={items.length - items.filter((i) => excludedCategories.has(i.category)).length}
+            isActive={categoryFilter === "all"}
+            size="sm"
+            onSelect={() => {
+              setCategoryFilter("all")
+              setExcludedCategories(new Set())
+            }}
+          />
           {CATEGORIES.map((cat) => {
             const colors = CATEGORY_COLORS[cat]
             const count = items.filter((i) => i.category === cat).length
-            if (count === 0 && categoryFilter !== cat) return null
+            const isExcluded = excludedCategories.has(cat)
+            if (count === 0 && categoryFilter !== cat && !isExcluded) return null
             return (
-              <button
+              <FilterButton
                 key={cat}
-                onClick={() => setCategoryFilter(cat)}
-                className={cn(
-                  "shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-all",
-                  categoryFilter === cat
-                    ? cn(colors.text, colors.bg, colors.border)
-                    : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-                )}
-              >
-                {CATEGORY_LABELS[cat]}
-                <span className="ml-1 opacity-60 font-mono">{count}</span>
-              </button>
+                label={CATEGORY_LABELS[cat]}
+                count={count}
+                isActive={categoryFilter === cat}
+                isExcluded={isExcluded}
+                style={colors}
+                size="sm"
+                canExclude={categoryFilter === "all" && !isExcluded}
+                onSelect={() => {
+                  if (isExcluded) {
+                    setExcludedCategories((prev) => {
+                      const next = new Set(prev)
+                      next.delete(cat)
+                      return next
+                    })
+                  } else {
+                    setCategoryFilter(cat)
+                    setExcludedCategories(new Set())
+                  }
+                }}
+                onExclude={() => {
+                  setExcludedCategories((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(cat)) next.delete(cat)
+                    else next.add(cat)
+                    return next
+                  })
+                }}
+              />
             )
           })}
-        </div>
+        </FilterRow>
       </div>
 
       {/* Content */}

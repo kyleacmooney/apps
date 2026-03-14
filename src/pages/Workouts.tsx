@@ -8,6 +8,7 @@ import { ArrowRight, Calendar, ChevronLeft, Zap, FileText, ChevronDown, ChevronR
 import { cn } from "@/lib/utils"
 import { useCanGoForward } from "@/lib/use-can-go-forward"
 import { PageHeader } from "@/components/mobile/PageHeader"
+import { FilterButton, FilterRow, type FilterButtonStyle } from "@/components/FilterButton"
 
 interface WorkoutSet extends TrendSet {
   id: string
@@ -66,10 +67,10 @@ const SESSION_DOT_COLORS: Record<string, string> = {
 
 const DAY_HEADERS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-const SESSION_TYPE_STYLES: Record<string, string> = {
-  workout: "bg-session-workout-bg text-session-workout font-bold",
-  mobility: "bg-session-mobility-bg text-session-mobility",
-  mixed: "bg-session-mixed-bg text-session-mixed",
+const SESSION_TYPE_STYLES: Record<string, FilterButtonStyle> = {
+  workout: { text: "text-session-workout font-bold", bg: "bg-session-workout-bg", border: "border-transparent" },
+  mobility: { text: "text-session-mobility", bg: "bg-session-mobility-bg", border: "border-transparent" },
+  mixed: { text: "text-session-mixed", bg: "bg-session-mixed-bg", border: "border-transparent" },
 }
 
 const SECTION_ORDER = ["warmup", "main", "accessory", "cooldown"] as const
@@ -81,92 +82,6 @@ const SECTION_LABELS: Record<string, string> = {
 }
 
 
-const LONG_PRESS_MS = 500
-
-function SessionTypeFilterButton({
-  type,
-  isActive,
-  isExcluded,
-  count,
-  canLongPress,
-  onSelect,
-  onLongPress,
-}: {
-  type: string
-  isActive: boolean
-  isExcluded: boolean
-  count: number
-  canLongPress: boolean
-  onSelect: () => void
-  onLongPress: () => void
-}) {
-  const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const didLongPress = useRef(false)
-  const [pressing, setPressing] = useState(false)
-  const [justToggled, setJustToggled] = useState(false)
-  const style = type !== "all" ? SESSION_TYPE_STYLES[type] : null
-
-  function handlePointerDown() {
-    didLongPress.current = false
-    if (canLongPress && type !== "all" && !isExcluded) {
-      setPressing(true)
-    }
-    longPressTimer.current = setTimeout(() => {
-      didLongPress.current = true
-      setPressing(false)
-      setJustToggled(true)
-      setTimeout(() => setJustToggled(false), 400)
-      onLongPress()
-    }, LONG_PRESS_MS)
-  }
-
-  function handlePointerUp() {
-    clearTimeout(longPressTimer.current)
-    setPressing(false)
-  }
-
-  return (
-    <button
-      onClick={() => {
-        if (didLongPress.current) return
-        onSelect()
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      onContextMenu={(e) => e.preventDefault()}
-      className={cn(
-        "relative shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap capitalize select-none touch-manipulation overflow-hidden",
-        "transition-all duration-200",
-        justToggled && "animate-[filter-pop_0.4s_ease-out]",
-        isExcluded
-          ? "border-upper-push-border/40 bg-upper-push-bg/30 text-text-dim line-through"
-          : isActive && style
-            ? `${style} border-transparent`
-            : isActive
-              ? "border-text-muted/40 bg-text-muted/20 text-text-secondary"
-              : "border-border-default bg-transparent text-text-dim hover:text-text-muted"
-      )}
-    >
-      {/* Long-press progress fill */}
-      {pressing && (
-        <span
-          className="absolute inset-0 rounded-lg opacity-20 animate-[filter-fill_0.5s_linear_forwards] origin-left"
-          style={{
-            background: isExcluded
-              ? "var(--color-lower)"
-              : "var(--color-upper-push)",
-          }}
-        />
-      )}
-      <span className="relative flex items-center gap-0.5">
-        {isExcluded && <X className="w-3 h-3 inline -ml-0.5" />}
-        {formatEnum(type)}
-        <span className="ml-1 opacity-60 font-mono text-[11px]">{count}</span>
-      </span>
-    </button>
-  )
-}
 
 function EnergyBar({ level }: { level: number }) {
   return (
@@ -1139,62 +1054,55 @@ export function Workouts() {
       {viewMode === "list" && (
         <div className="max-w-2xl mx-auto px-5 pt-3 pb-4 border-b border-border-default">
           <div className="select-none">
-            <div className="flex gap-1.5 overflow-x-auto mt-3 -mx-5 px-5 scrollbar-none">
+            <FilterRow
+              canExclude={activeFilter === "all"}
+              excludedCount={excludedTypes.size}
+              hint="Hold a type to exclude it"
+              className="mt-3"
+            >
               {allTypes.map((type) => {
-                  const isActive = activeFilter === type
-                  const isExcluded = type !== "all" && excludedTypes.has(type)
-                  const count = type === "all"
-                    ? sessions.length - sessions.filter((s) => excludedTypes.has(s.session_type)).length
-                    : typeCounts[type] ?? 0
-                  const canLongPress = activeFilter === "all"
-
-                  return (
-                    <SessionTypeFilterButton
-                      key={type}
-                      type={type}
-                      isActive={isActive}
-                      isExcluded={isExcluded}
-                      count={count}
-                      canLongPress={canLongPress}
-                      onSelect={() => {
-                        if (type === "all") {
-                          setActiveFilter("all")
-                          setExcludedTypes(new Set())
-                        } else if (excludedTypes.has(type)) {
-                          // Tap an excluded type to un-exclude it
-                          setExcludedTypes((prev) => {
-                            const next = new Set(prev)
-                            next.delete(type)
-                            return next
-                          })
-                        } else {
-                          setActiveFilter(type)
-                          setExcludedTypes(new Set())
-                        }
-                      }}
-                      onLongPress={() => {
-                        if (type === "all" || activeFilter !== "all") return
+                const isActive = activeFilter === type
+                const isExcluded = type !== "all" && excludedTypes.has(type)
+                const count = type === "all"
+                  ? sessions.length - sessions.filter((s) => excludedTypes.has(s.session_type)).length
+                  : typeCounts[type] ?? 0
+                return (
+                  <FilterButton
+                    key={type}
+                    label={formatEnum(type)}
+                    count={count}
+                    isActive={isActive}
+                    isExcluded={isExcluded}
+                    style={type !== "all" ? SESSION_TYPE_STYLES[type] : null}
+                    canExclude={activeFilter === "all" && type !== "all"}
+                    onSelect={() => {
+                      if (type === "all") {
+                        setActiveFilter("all")
+                        setExcludedTypes(new Set())
+                      } else if (excludedTypes.has(type)) {
                         setExcludedTypes((prev) => {
                           const next = new Set(prev)
-                          if (next.has(type)) next.delete(type)
-                          else next.add(type)
+                          next.delete(type)
                           return next
                         })
-                      }}
-                    />
-                  )
+                      } else {
+                        setActiveFilter(type)
+                        setExcludedTypes(new Set())
+                      }
+                    }}
+                    onExclude={() => {
+                      if (activeFilter !== "all") return
+                      setExcludedTypes((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(type)) next.delete(type)
+                        else next.add(type)
+                        return next
+                      })
+                    }}
+                  />
+                )
               })}
-            </div>
-            {activeFilter === "all" && excludedTypes.size === 0 && (
-                <p className="text-text-dim text-[10px] font-mono mt-1.5 ml-0.5 opacity-60">
-                  Hold a type to exclude it
-                </p>
-              )}
-            {activeFilter === "all" && excludedTypes.size > 0 && (
-              <p className="text-upper-push/60 text-[10px] font-mono mt-1.5 ml-0.5">
-                {excludedTypes.size} excluded — tap to restore
-              </p>
-            )}
+            </FilterRow>
           </div>
         </div>
       )}
