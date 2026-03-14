@@ -20,6 +20,27 @@ const GUIDES: Record<string, { title: string; subtitle: string; rawUrl: string; 
     prologue:
       'Copy this guide into Claude.ai project\'s instructions section to let it research plants and update your tracker via MCP.',
   },
+  todos: {
+    title: 'Todos',
+    subtitle: 'Claude + Supabase MCP guide',
+    rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/watchlist-todos-interests-instructions.md',
+    prologue:
+      'Copy this guide into Claude.ai project\'s instructions section to let it manage your todos, interests, and watchlist via MCP.',
+  },
+  interests: {
+    title: 'Interests',
+    subtitle: 'Claude + Supabase MCP guide',
+    rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/watchlist-todos-interests-instructions.md',
+    prologue:
+      'Copy this guide into Claude.ai project\'s instructions section to let it manage your todos, interests, and watchlist via MCP.',
+  },
+  watchlist: {
+    title: 'Watchlist',
+    subtitle: 'Claude + Supabase MCP guide',
+    rawUrl: 'https://raw.githubusercontent.com/kyleacmooney/apps/main/docs/watchlist-todos-interests-instructions.md',
+    prologue:
+      'Copy this guide into Claude.ai project\'s instructions section to let it manage your todos, interests, and watchlist via MCP.',
+  },
 }
 
 export function Instructions() {

@@ -461,6 +461,12 @@ export function Setup() {
                   >
                     Plant care guide <ExternalLink className="w-3 h-3" />
                   </a>
+                  <a
+                    href="#/instructions/todos"
+                    className="flex items-center gap-1.5 text-upper-pull hover:underline text-xs"
+                  >
+                    Todos, interests &amp; watchlist guide <ExternalLink className="w-3 h-3" />
+                  </a>
                 </div>
               </li>
             </ol>

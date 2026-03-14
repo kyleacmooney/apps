@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useDataClient } from "@/context/SupabaseContext"
@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   Clapperboard,
+  FileText,
 } from "lucide-react"
 
 interface WatchlistItem {
@@ -886,7 +887,7 @@ export function Watchlist() {
                 style={colors}
                 icon={Icon}
                 size="sm"
-                canExclude={typeFilter === "all" && !isExcluded}
+                canExclude={typeFilter === "all"}
                 onSelect={() => {
                   if (isExcluded) {
                     setExcludedTypes((prev) => {
@@ -990,6 +991,17 @@ export function Watchlist() {
             </button>
           </div>
         )}
+
+        {/* Subtle guide link */}
+        <div className="flex justify-center pt-8 pb-4">
+          <Link
+            to="/instructions/watchlist"
+            className="inline-flex items-center gap-1.5 text-xs text-text-dim hover:text-text-muted transition-colors no-underline"
+          >
+            <FileText className="w-3 h-3" />
+            Claude setup guide
+          </Link>
+        </div>
       </div>
     </div>
   )

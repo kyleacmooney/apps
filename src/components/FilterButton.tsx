@@ -47,7 +47,8 @@ export function FilterButton({
 
   function handlePointerDown() {
     didLongPress.current = false
-    if (canExclude && !isExcluded) {
+    if (!canExclude) return
+    if (!isExcluded) {
       setPressing(true)
     }
     longPressTimer.current = setTimeout(() => {

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useDataClient } from "@/context/SupabaseContext"
@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   ListTodo,
   Pencil,
+  FileText,
 } from "lucide-react"
 
 interface Todo {
@@ -804,7 +805,7 @@ export function Todos() {
                 isExcluded={isExcluded}
                 style={colors}
                 size="sm"
-                canExclude={categoryFilter === "all" && !isExcluded}
+                canExclude={categoryFilter === "all"}
                 className="capitalize"
                 onSelect={() => {
                   if (isExcluded) {
@@ -910,6 +911,17 @@ export function Todos() {
             </button>
           </div>
         )}
+
+        {/* Subtle guide link */}
+        <div className="flex justify-center pt-8 pb-4">
+          <Link
+            to="/instructions/todos"
+            className="inline-flex items-center gap-1.5 text-xs text-text-dim hover:text-text-muted transition-colors no-underline"
+          >
+            <FileText className="w-3 h-3" />
+            Claude setup guide
+          </Link>
+        </div>
       </div>
     </div>
   )
