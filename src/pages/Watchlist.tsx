@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect, type RefObject } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { usePersistedState } from "@/lib/use-persisted-state"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/mobile/PageHeader"
 import { friendlyError } from "@/lib/error-utils"
 import { FilterButton, FilterRow } from "@/components/FilterButton"
+import { searchTmdbTitles, type TmdbTitleSuggestion } from "@/lib/tmdb"
 import {
   ArrowRight,
   RefreshCw,
@@ -76,6 +77,212 @@ const TYPE_COLORS: Record<MediaType, { text: string; bg: string; border: string 
 }
 
 type FilterMode = "all" | WatchStatus
+
+function TitleAutocompleteInput({
+  title,
+  setTitle,
+  year,
+  setYear,
+  mediaType,
+  setMediaType,
+  inputRef,
+  onSubmit,
+}: {
+  title: string
+  setTitle: (value: string) => void
+  year: string
+  setYear: (value: string) => void
+  mediaType: MediaType
+  setMediaType: (value: MediaType) => void
+  inputRef: RefObject<HTMLInputElement | null>
+  onSubmit: () => void
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [debouncedTitle, setDebouncedTitle] = useState(title)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const [autofillNotice, setAutofillNotice] = useState<{
+    previousTitle: string
+    previousYear: string
+    previousMediaType: MediaType
+  } | null>(null)
+  const noticeTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedTitle(title.trim()), 300)
+    return () => window.clearTimeout(timeout)
+  }, [title])
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown)
+    return () => window.removeEventListener("mousedown", handlePointerDown)
+  }, [])
+
+  const { data: suggestions = [], isFetching: suggestionsLoading, error: suggestionsError } = useQuery({
+    queryKey: ["watchlist", "title-search", debouncedTitle],
+    queryFn: () => searchTmdbTitles(debouncedTitle),
+    enabled: debouncedTitle.length >= 2,
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    setHighlightedIndex(0)
+  }, [suggestions])
+
+  const applySuggestion = (suggestion: TmdbTitleSuggestion) => {
+    const previous = {
+      previousTitle: title,
+      previousYear: year,
+      previousMediaType: mediaType,
+    }
+
+    setTitle(suggestion.title)
+    if (suggestion.year !== null) {
+      setYear(String(suggestion.year))
+    }
+    if (suggestion.kind !== "other") {
+      setMediaType(suggestion.kind)
+    }
+    setShowSuggestions(false)
+    setAutofillNotice(previous)
+
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current)
+    }
+    noticeTimerRef.current = window.setTimeout(() => {
+      setAutofillNotice(null)
+      noticeTimerRef.current = null
+    }, 7000)
+  }
+
+  const undoAutofill = () => {
+    if (!autofillNotice) return
+    setTitle(autofillNotice.previousTitle)
+    setYear(autofillNotice.previousYear)
+    setMediaType(autofillNotice.previousMediaType)
+    setAutofillNotice(null)
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current)
+      noticeTimerRef.current = null
+    }
+    inputRef.current?.focus()
+  }
+
+  const canShowSuggestions = showSuggestions && title.trim().length >= 2
+
+  return (
+    <div ref={containerRef} className="mb-3">
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            setShowSuggestions(true)
+          }}
+          onFocus={() => setShowSuggestions(true)}
+          onKeyDown={(e) => {
+            if (canShowSuggestions && suggestions.length > 0 && e.key === "ArrowDown") {
+              e.preventDefault()
+              setHighlightedIndex((idx) => (idx + 1) % suggestions.length)
+              return
+            }
+            if (canShowSuggestions && suggestions.length > 0 && e.key === "ArrowUp") {
+              e.preventDefault()
+              setHighlightedIndex((idx) => (idx - 1 + suggestions.length) % suggestions.length)
+              return
+            }
+            if (e.key === "Escape") {
+              setShowSuggestions(false)
+              return
+            }
+            if (e.key === "Enter") {
+              if (canShowSuggestions && suggestions[highlightedIndex]) {
+                e.preventDefault()
+                applySuggestion(suggestions[highlightedIndex])
+                return
+              }
+              onSubmit()
+            }
+          }}
+          placeholder="Movie or show title"
+          className="w-full bg-transparent text-text-primary text-base font-medium placeholder:text-text-dim outline-none"
+        />
+
+        {canShowSuggestions && (
+          <div className="absolute top-full left-0 right-0 z-20 mt-1 rounded-lg border border-border-default bg-bg-elevated shadow-xl max-h-56 overflow-y-auto">
+            {suggestionsLoading && <div className="px-3 py-2 text-sm text-text-muted">Searching TMDB…</div>}
+
+            {!suggestionsLoading && suggestionsError && (
+              <div className="px-3 py-2 text-sm text-amber-300">Couldn&apos;t load suggestions. Keep typing to add manually.</div>
+            )}
+
+            {!suggestionsLoading && !suggestionsError && suggestions.length === 0 && (
+              <div className="px-3 py-2 text-sm text-text-muted">No TMDB matches. You can still add this title manually.</div>
+            )}
+
+            {!suggestionsLoading && suggestions.map((suggestion, index) => (
+              <button
+                key={`${suggestion.kind}-${suggestion.id}`}
+                type="button"
+                onClick={() => applySuggestion(suggestion)}
+                className={cn(
+                  "w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors",
+                  highlightedIndex === index ? "bg-bg-secondary" : "hover:bg-bg-secondary"
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm text-text-primary truncate">{suggestion.title}</span>
+                  <span className="block text-xs text-text-muted">
+                    {suggestion.year ?? "Unknown year"}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-mono uppercase",
+                    suggestion.kind === "movie" && "text-upper-push bg-upper-push-bg border-upper-push-border",
+                    suggestion.kind === "show" && "text-cardio bg-cardio-bg border-cardio-border",
+                    suggestion.kind === "other" && "text-text-muted bg-bg-secondary border-border-default"
+                  )}
+                >
+                  {suggestion.kind}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {autofillNotice && (
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-ai-border bg-ai-bg px-3 py-2 text-xs text-ai">
+          <span>Autofilled from TMDB. You can keep it or undo.</span>
+          <button
+            type="button"
+            onClick={undoAutofill}
+            className="rounded-md border border-ai-border px-2 py-1 font-semibold hover:bg-bg-secondary transition-colors"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function StarRating({
   value,
@@ -181,14 +388,15 @@ function AddWatchlistForm({
 
   return (
     <div className="rounded-xl bg-bg-secondary border border-border-default p-4 overflow-hidden">
-      <input
-        ref={titleRef}
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") handleSubmit() }}
-        placeholder="Movie or show title"
-        className="w-full bg-transparent text-text-primary text-base font-medium placeholder:text-text-dim outline-none mb-3"
+      <TitleAutocompleteInput
+        title={title}
+        setTitle={setTitle}
+        year={year}
+        setYear={setYear}
+        mediaType={mediaType}
+        setMediaType={setMediaType}
+        inputRef={titleRef}
+        onSubmit={handleSubmit}
       />
 
       {/* Type toggle */}
@@ -358,14 +566,15 @@ function EditWatchlistForm({
 
   return (
     <div className="rounded-xl bg-bg-secondary border border-upper-push-border p-4 overflow-hidden">
-      <input
-        ref={titleRef}
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") handleSubmit() }}
-        placeholder="Movie or show title"
-        className="w-full bg-transparent text-text-primary text-base font-medium placeholder:text-text-dim outline-none mb-3"
+      <TitleAutocompleteInput
+        title={title}
+        setTitle={setTitle}
+        year={year}
+        setYear={setYear}
+        mediaType={mediaType}
+        setMediaType={setMediaType}
+        inputRef={titleRef}
+        onSubmit={handleSubmit}
       />
 
       {/* Type toggle */}
