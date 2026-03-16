@@ -1,3 +1,5 @@
+import { SUPABASE_URL } from "@/lib/supabase"
+
 export type TmdbSuggestionKind = "movie" | "show" | "other"
 
 export interface TmdbTitleSuggestion {
@@ -7,56 +9,37 @@ export interface TmdbTitleSuggestion {
   kind: TmdbSuggestionKind
 }
 
-interface TmdbSearchResult {
-  id: number
-  media_type: string
-  title?: string
-  name?: string
-  release_date?: string
-  first_air_date?: string
+interface TmdbSearchResponse {
+  results?: TmdbTitleSuggestion[]
+  error?: string
 }
 
-function extractYear(rawDate?: string): number | null {
-  if (!rawDate) return null
-  const year = Number(rawDate.slice(0, 4))
-  return Number.isFinite(year) && year > 1800 ? year : null
-}
+const TMDB_SEARCH_EDGE_URL = `${SUPABASE_URL}/functions/v1/tmdb-search`
 
-export async function searchTmdbTitles(query: string): Promise<TmdbTitleSuggestion[]> {
-  const apiKey = import.meta.env.VITE_TMDB_API_KEY
-  if (!apiKey) {
+export async function searchTmdbTitles({
+  query,
+  accessToken,
+}: {
+  query: string
+  accessToken?: string
+}): Promise<TmdbTitleSuggestion[]> {
+  if (!accessToken) {
     return []
   }
 
-  const params = new URLSearchParams({
-    api_key: apiKey,
-    query,
-    include_adult: "false",
-    language: "en-US",
-    page: "1",
+  const response = await fetch(TMDB_SEARCH_EDGE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ query }),
   })
 
-  const response = await fetch(`https://api.themoviedb.org/3/search/multi?${params.toString()}`)
+  const payload = await response.json() as TmdbSearchResponse
   if (!response.ok) {
-    throw new Error(`TMDB request failed (${response.status})`)
+    throw new Error(payload.error ?? `TMDB search failed (${response.status})`)
   }
 
-  const payload = await response.json() as { results?: TmdbSearchResult[] }
-  return (payload.results ?? [])
-    .slice(0, 8)
-    .map((result): TmdbTitleSuggestion | null => {
-      const kind: TmdbSuggestionKind =
-        result.media_type === "movie" ? "movie" : result.media_type === "tv" ? "show" : "other"
-
-      const title = result.title?.trim() || result.name?.trim() || ""
-      if (!title) return null
-
-      return {
-        id: result.id,
-        title,
-        year: extractYear(result.release_date ?? result.first_air_date),
-        kind,
-      }
-    })
-    .filter((item): item is TmdbTitleSuggestion => item !== null)
+  return payload.results ?? []
 }

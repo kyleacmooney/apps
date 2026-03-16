@@ -98,6 +98,7 @@ function TitleAutocompleteInput({
   onSubmit: () => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const { session } = useAuth()
   const [debouncedTitle, setDebouncedTitle] = useState(title)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(0)
@@ -134,7 +135,7 @@ function TitleAutocompleteInput({
 
   const { data: suggestions = [], isFetching: suggestionsLoading, error: suggestionsError } = useQuery({
     queryKey: ["watchlist", "title-search", debouncedTitle],
-    queryFn: () => searchTmdbTitles(debouncedTitle),
+    queryFn: () => searchTmdbTitles({ query: debouncedTitle, accessToken: session?.access_token }),
     enabled: debouncedTitle.length >= 2,
     staleTime: 60_000,
   })
